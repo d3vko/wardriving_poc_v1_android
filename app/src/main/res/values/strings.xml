@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">RF Village MX Wardriving</string>
+    <string name="wardriving_notification_channel">Wardriving collection</string>
+    <string name="wardriving_notification_title">Wardriving session active</string>
+</resources>
