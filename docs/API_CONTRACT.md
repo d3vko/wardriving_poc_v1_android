@@ -64,14 +64,14 @@ Request:
 Current environment shape:
 
 ```bash
-API_BASE_URL=https://www.wardriving.lat/wardriving/api/v1/
+API_BASE_URL=https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/
 API_UPLOAD_PATH=files-uploaded/
 ```
 
 Resolved upload endpoint:
 
 ```http
-POST https://www.wardriving.lat/wardriving/api/v1/files-uploaded/
+POST https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/files-uploaded/
 ```
 
 Multipart form-data parts:

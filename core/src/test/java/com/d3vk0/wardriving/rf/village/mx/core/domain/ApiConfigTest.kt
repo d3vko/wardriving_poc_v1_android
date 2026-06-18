@@ -7,7 +7,7 @@ class ApiConfigTest {
     @Test
     fun resolvesUploadUrlFromApiBaseUrlAndRelativePath() {
         val config = ApiConfig(
-            baseUrl = "https://www.wardriving.lat/wardriving/api/v1/",
+            baseUrl = "https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/",
             loginPath = "auth/login/",
             registerPath = "auth/register/",
             passwordRecoveryPath = "auth/password/reset/",
@@ -17,7 +17,7 @@ class ApiConfigTest {
         )
 
         assertEquals(
-            "https://www.wardriving.lat/wardriving/api/v1/files-uploaded/",
+            "https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/files-uploaded/",
             config.resolvedUploadUrl(),
         )
     }
@@ -25,7 +25,7 @@ class ApiConfigTest {
     @Test
     fun keepsBasePathWhenUploadPathStartsWithSlash() {
         val config = ApiConfig(
-            baseUrl = "https://www.wardriving.lat/wardriving/api/v1",
+            baseUrl = "https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1",
             loginPath = "auth/login/",
             registerPath = "auth/register/",
             passwordRecoveryPath = "auth/password/reset/",
@@ -35,7 +35,7 @@ class ApiConfigTest {
         )
 
         assertEquals(
-            "https://www.wardriving.lat/wardriving/api/v1/files-uploaded/",
+            "https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/files-uploaded/",
             config.resolvedUploadUrl(),
         )
     }

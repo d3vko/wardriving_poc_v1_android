@@ -28,7 +28,7 @@ Native Android wardriving MVP in Kotlin with Jetpack Compose, Material 3, Room, 
    Then edit `.env`:
 
    ```bash
-   API_BASE_URL=https://www.wardriving.lat/wardriving/api/v1/
+   API_BASE_URL=https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/
    API_LOGIN_PATH=auth/login/
    API_REGISTER_PATH=auth/register/
    API_PASSWORD_RECOVERY_PATH=auth/password/reset/
@@ -39,7 +39,7 @@ Native Android wardriving MVP in Kotlin with Jetpack Compose, Material 3, Room, 
    ```
 
    The app module reads values in this order: Gradle property, real environment variable, `.env`, default value. Sync Android Studio after editing `.env` because values are compiled into `BuildConfig`.
-   Upload logs include the resolved endpoint and payload source, for example `Uploading files=[<file>.csv] device_source=wifi_ble_android to https://www.wardriving.lat/wardriving/api/v1/files-uploaded/`.
+   Upload logs include the resolved endpoint and payload source, for example `Uploading files=[<file>.csv] device_source=wifi_ble_android to https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/files-uploaded/`.
 
 4. Open the project in Android Studio and sync Gradle.
 5. Run the `app` configuration on a physical device. Wi-Fi/BLE/LTE scanning is not useful on most emulators.
