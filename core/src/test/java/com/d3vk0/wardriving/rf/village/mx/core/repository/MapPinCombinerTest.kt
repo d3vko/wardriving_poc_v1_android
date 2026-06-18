@@ -41,21 +41,53 @@ class MapPinCombinerTest {
     }
 
     @Test
-    fun `caps combined pins at one hundred`() {
-        val wifi = (1L..80L).map { wifiBle(id = it, timestamp = it) }
-        val lte = (81L..140L).map { lte(id = it, timestamp = it) }
+    fun `returns all deduplicated pins below five hundred`() {
+        val wifi = (1L..260L).map { wifiBle(id = it, timestamp = it) }
+        val lte = (261L..480L).map { lte(id = it, timestamp = it) }
 
         val pins = combineMapPins(wifi, lte)
 
-        assertEquals(100, pins.size)
-        assertEquals(140L, pins.first().timestamp)
-        assertEquals(41L, pins.last().timestamp)
+        assertEquals(480, pins.size)
+        assertEquals(480L, pins.first().timestamp)
+        assertEquals(1L, pins.last().timestamp)
+    }
+
+    @Test
+    fun `deduplicates repeated wifi ble and lte points`() {
+        val pins = combineMapPins(
+            wifiBle = listOf(
+                wifiBle(id = 1, timestamp = 100, type = "WIFI", mac = "00:11:22:33:44:AA", latitude = 19.1234561, longitude = -99.1234561),
+                wifiBle(id = 2, timestamp = 200, type = "WIFI", mac = "00:11:22:33:44:AA", latitude = 19.1234562, longitude = -99.1234562),
+                wifiBle(id = 3, timestamp = 300, type = "BLE", latitude = 19.1234562, longitude = -99.1234562),
+            ),
+            lte = listOf(
+                lte(id = 1, timestamp = 100, latitude = 19.2, longitude = -99.2),
+                lte(id = 1, timestamp = 250, latitude = 19.2, longitude = -99.2),
+            ),
+        )
+
+        assertEquals(3, pins.size)
+        assertEquals(listOf(MapPinType.BLE, MapPinType.LTE, MapPinType.WIFI), pins.map { it.type })
+        assertEquals(200L, pins.last().timestamp)
+    }
+
+    @Test
+    fun `returns all deduplicated pins above five hundred newest first`() {
+        val wifi = (1L..300L).map { wifiBle(id = it, timestamp = it) }
+        val lte = (301L..650L).map { lte(id = it, timestamp = it) }
+
+        val pins = combineMapPins(wifi, lte)
+
+        assertEquals(650, pins.size)
+        assertEquals(650L, pins.first().timestamp)
+        assertEquals(1L, pins.last().timestamp)
     }
 
     private fun wifiBle(
         id: Long,
         timestamp: Long = id,
         type: String = "WIFI",
+        mac: String = "00:11:22:33:44:${id.toString().padStart(2, '0')}",
         latitude: Double? = 19.0 + id / 1000.0,
         longitude: Double? = -99.0 - id / 1000.0,
     ) = WifiBleSampleEntity(
@@ -63,7 +95,7 @@ class MapPinCombinerTest {
         sessionId = "session-1",
         timestamp = timestamp,
         type = type,
-        mac = "00:11:22:33:44:${id.toString().padStart(2, '0')}",
+        mac = mac,
         ssid = if (type == "WIFI") "AP $id" else "",
         authMode = "WPA2",
         channel = "1",
@@ -90,6 +122,8 @@ class MapPinCombinerTest {
         mnc = "020",
         lac = 10,
         cellId = id.toInt(),
+        pci = 123,
+        earfcn = 2750,
         band = "B4",
         rssi = -70,
         rsrp = -95,

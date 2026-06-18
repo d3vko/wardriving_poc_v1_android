@@ -7,8 +7,6 @@ import android.os.Build
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.d3vk0.wardriving.rf.village.mx.core.csv.CsvExportManager
 import com.d3vk0.wardriving.rf.village.mx.core.domain.ApiConfig
 import com.d3vk0.wardriving.rf.village.mx.core.domain.LiveCounters
@@ -16,11 +14,11 @@ import com.d3vk0.wardriving.rf.village.mx.core.domain.MapPin
 import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionSettings
 import com.d3vk0.wardriving.rf.village.mx.core.local.WardrivingSessionEntity
 import com.d3vk0.wardriving.rf.village.mx.core.repository.AuthRepository
+import com.d3vk0.wardriving.rf.village.mx.core.repository.UploadAttemptResult
 import com.d3vk0.wardriving.rf.village.mx.core.repository.UploadRepository
 import com.d3vk0.wardriving.rf.village.mx.core.repository.WardrivingRepository
 import com.d3vk0.wardriving.rf.village.mx.core.settings.AppSettingsStore
 import com.d3vk0.wardriving.rf.village.mx.service.WardrivingForegroundService
-import com.d3vk0.wardriving.rf.village.mx.worker.UploadWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -153,13 +151,24 @@ class MainViewModel @Inject constructor(
     fun exportZip() = export { csvExportManager.exportZip(requireActiveSession()) }
 
     fun uploadExports() = viewModelScope.launch {
-        val sessionId = requireActiveSession()
-        val wifiBle = csvExportManager.exportWifiBle(sessionId)
-        val lte = csvExportManager.exportLte(sessionId)
-        uploadRepository.enqueuePending(sessionId, apiConfig.wifiBleUploadType, wifiBle, sampleCount(wifiBle))
-        uploadRepository.enqueuePending(sessionId, apiConfig.lteUploadType, lte, sampleCount(lte))
-        WorkManager.getInstance(getApplication()).enqueue(OneTimeWorkRequestBuilder<UploadWorker>().build())
-        _uiState.update { it.copy(status = "Upload queued") }
+        runCatching {
+            val sessionId = requireActiveSession()
+            val wifiBle = csvExportManager.exportWifiBle(sessionId)
+            val lte = csvExportManager.exportLte(sessionId)
+            uploadRepository.enqueuePending(sessionId, apiConfig.wifiBleUploadType, wifiBle, sampleCount(wifiBle))
+            uploadRepository.enqueuePending(sessionId, apiConfig.lteUploadType, lte, sampleCount(lte))
+            uploadRepository.uploadAllPending()
+        }.onSuccess { results ->
+            val failure = results.filterIsInstance<UploadAttemptResult.Failure>().firstOrNull()
+            _uiState.update {
+                it.copy(
+                    status = failure?.message
+                        ?: if (results.isEmpty()) "No pending uploads" else "Uploads completed",
+                )
+            }
+        }.onFailure { error ->
+            _uiState.update { it.copy(status = error.message ?: "Upload failed") }
+        }
     }
 
     fun saveLastExportAs(destination: android.net.Uri) = viewModelScope.launch {

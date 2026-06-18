@@ -26,6 +26,9 @@ interface WardrivingDao {
     @Query("SELECT * FROM wardriving_sessions WHERE status IN ('RUNNING', 'PAUSED') ORDER BY startedAt DESC LIMIT 1")
     suspend fun getActiveSession(): WardrivingSessionEntity?
 
+    @Query("SELECT * FROM wardriving_sessions")
+    suspend fun getAllSessions(): List<WardrivingSessionEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertLocation(sample: LocationSampleEntity)
 
@@ -48,10 +51,9 @@ interface WardrivingDao {
             AND longitude IS NOT NULL
             AND (:sessionId IS NULL OR sessionId = :sessionId)
         ORDER BY timestamp DESC
-        LIMIT :limit
         """,
     )
-    fun observeLatestGeolocatedWifiBleSamples(sessionId: String?, limit: Int): Flow<List<WifiBleSampleEntity>>
+    fun observeGeolocatedWifiBleSamples(sessionId: String?): Flow<List<WifiBleSampleEntity>>
 
     @Query(
         """
@@ -60,10 +62,9 @@ interface WardrivingDao {
             AND longitude IS NOT NULL
             AND (:sessionId IS NULL OR sessionId = :sessionId)
         ORDER BY timestamp DESC
-        LIMIT :limit
         """,
     )
-    fun observeLatestGeolocatedLteSamples(sessionId: String?, limit: Int): Flow<List<LteSampleEntity>>
+    fun observeGeolocatedLteSamples(sessionId: String?): Flow<List<LteSampleEntity>>
 
     @Query("SELECT COUNT(*) FROM wifi_ble_samples WHERE sessionId = :sessionId AND type = 'WIFI'")
     fun observeWifiCount(sessionId: String): Flow<Int>
@@ -80,14 +81,23 @@ interface WardrivingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertPendingUpload(upload: PendingUploadEntity): Long
 
-    @Query("SELECT * FROM pending_uploads WHERE uploadedAt IS NULL ORDER BY createdAt ASC")
+    @Query("SELECT * FROM pending_uploads WHERE alreadyUploaded = 0 ORDER BY createdAt ASC")
     suspend fun getPendingUploads(): List<PendingUploadEntity>
 
     @Query("UPDATE pending_uploads SET retryCount = retryCount + 1, lastError = :error WHERE id = :id")
     suspend fun markUploadFailed(id: Long, error: String)
 
-    @Query("UPDATE pending_uploads SET uploadedAt = :uploadedAt, lastError = NULL WHERE id = :id")
+    @Query("UPDATE pending_uploads SET alreadyUploaded = 1, uploadedAt = :uploadedAt, lastError = NULL WHERE id = :id")
     suspend fun markUploadSucceeded(id: Long, uploadedAt: Long)
+
+    @Query("SELECT * FROM pending_uploads WHERE id = :id")
+    suspend fun getPendingUpload(id: Long): PendingUploadEntity?
+
+    @Query("SELECT * FROM pending_uploads")
+    suspend fun getAllPendingUploads(): List<PendingUploadEntity>
+
+    @Query("DELETE FROM pending_uploads WHERE id = :id")
+    suspend fun deletePendingUpload(id: Long)
 
     @Query("DELETE FROM wardriving_sessions")
     suspend fun deleteAllSessions()

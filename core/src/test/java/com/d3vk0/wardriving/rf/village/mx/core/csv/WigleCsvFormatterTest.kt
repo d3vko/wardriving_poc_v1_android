@@ -1,6 +1,7 @@
 package com.d3vk0.wardriving.rf.village.mx.core.csv
 
 import com.d3vk0.wardriving.rf.village.mx.core.local.WifiBleSampleEntity
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -43,7 +44,32 @@ class WigleCsvFormatterTest {
         )
 
         assertTrue(csv.startsWith(WigleCsvFormatter.HEADER))
-        assertTrue(csv.contains("AA:BB:CC:DD:EE:FF,\"lab,ap\",[WPA2-PSK-CCMP][ESS],1970-01-01 00:00:00,6,-45,19.0,-99.0,2200.0,5.0,WIFI"))
-        assertTrue(csv.contains("11:22:33:44:55:66,,BLE,1970-01-01 00:00:00,,-70,19.0,-99.0,,,BLE"))
+        assertTrue(csv.contains("AA:BB:CC:DD:EE:FF,\"lab,ap\",[WPA2-PSK-CCMP][ESS],1970-01-01 00:00:00,6,-45,19.0000000,-99.0000000,2200.00,5.00,WIFI"))
+        assertTrue(csv.contains("11:22:33:44:55:66,,BLE,1970-01-01 00:00:00,,-70,19.0000000,-99.0000000,,,BLE"))
+    }
+
+    @Test
+    fun writesInvalidDecimalValuesAsEmptyFields() {
+        val csv = WigleCsvFormatter().format(
+            listOf(
+                WifiBleSampleEntity(
+                    sessionId = "s1",
+                    timestamp = 0L,
+                    type = "WIFI",
+                    mac = "AA:BB:CC:DD:EE:FF",
+                    ssid = "lab",
+                    authMode = "WPA2",
+                    channel = "6",
+                    rssi = -45,
+                    latitude = 99.99999996,
+                    longitude = -999.99999996,
+                    altitudeMeters = Double.NaN,
+                    accuracyMeters = Float.POSITIVE_INFINITY,
+                    rawPayload = null,
+                ),
+            ),
+        ).lines()[1]
+
+        assertEquals("AA:BB:CC:DD:EE:FF,lab,WPA2,1970-01-01 00:00:00,6,-45,,,,,WIFI", csv)
     }
 }

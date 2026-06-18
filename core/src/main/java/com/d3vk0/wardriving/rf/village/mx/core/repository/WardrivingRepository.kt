@@ -13,10 +13,15 @@ import com.d3vk0.wardriving.rf.village.mx.core.local.WardrivingSessionEntity
 import com.d3vk0.wardriving.rf.village.mx.core.local.WifiBleSampleEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
+import java.io.File
+import java.util.Locale
 import java.util.UUID
 
-class WardrivingRepository(private val dao: WardrivingDao) {
-    private val mapPinLimit = 100
+class WardrivingRepository(
+    private val dao: WardrivingDao,
+) {
 
     fun observeSessions(): Flow<List<WardrivingSessionEntity>> = dao.observeSessions()
 
@@ -93,14 +98,21 @@ class WardrivingRepository(private val dao: WardrivingDao) {
 
     fun observeLatestMapPins(sessionId: String?): Flow<List<MapPin>> {
         return combine(
-            dao.observeLatestGeolocatedWifiBleSamples(sessionId, mapPinLimit),
-            dao.observeLatestGeolocatedLteSamples(sessionId, mapPinLimit),
+            dao.observeGeolocatedWifiBleSamples(sessionId),
+            dao.observeGeolocatedLteSamples(sessionId),
         ) { wifiBle, lte ->
-            combineMapPins(wifiBle, lte, mapPinLimit)
-        }
+            combineMapPins(wifiBle, lte)
+        }.flowOn(Dispatchers.Default)
     }
 
     suspend fun deleteAllLocalData() {
+        val exportPaths = dao.getAllSessions()
+            .flatMap { it.localExportPath.orEmpty().split(";") }
+            .filter { it.isNotBlank() }
+        val pendingPaths = dao.getAllPendingUploads().map { it.filePath }
+        (exportPaths + pendingPaths).forEach { path ->
+            runCatching { File(path).takeIf { it.exists() }?.delete() }
+        }
         dao.deleteAllPendingUploads()
         dao.deleteAllLte()
         dao.deleteAllWifiBle()
@@ -112,12 +124,35 @@ class WardrivingRepository(private val dao: WardrivingDao) {
 fun combineMapPins(
     wifiBle: List<WifiBleSampleEntity>,
     lte: List<LteSampleEntity>,
-    limit: Int = 100,
 ): List<MapPin> {
-    return (wifiBle.mapNotNull { it.toMapPin() } + lte.mapNotNull { it.toMapPin() })
+    val wifiBlePins = wifiBle.mapNotNull { sample ->
+        sample.toMapPin()?.let { sample.dedupKey() to it }
+    }
+    val ltePins = lte.mapNotNull { sample ->
+        sample.toMapPin()?.let { sample.dedupKey() to it }
+    }
+    return (wifiBlePins + ltePins)
         .sortedByDescending { it.timestamp }
-        .take(limit)
+        .distinctBy { it.first }
+        .map { it.second }
 }
+
+private val Pair<String, MapPin>.timestamp: Long get() = second.timestamp
+
+private fun WifiBleSampleEntity.dedupKey(): String {
+    return "${type.uppercase(Locale.US)}:${mac.lowercase(Locale.US)}:${coordinateKey(latitude, longitude)}"
+}
+
+private fun LteSampleEntity.dedupKey(): String {
+    val pciPart = pci?.let { ":$it" }.orEmpty()
+    return "LTE:${mcc.orEmpty()}:${mnc.orEmpty()}:${lac ?: ""}:${cellId ?: ""}$pciPart:${coordinateKey(latitude, longitude)}"
+}
+
+private fun coordinateKey(latitude: Double?, longitude: Double?): String {
+    return "${latitude.roundedCoordinate()},${longitude.roundedCoordinate()}"
+}
+
+private fun Double?.roundedCoordinate(): String = String.format(Locale.US, "%.5f", this ?: 0.0)
 
 private fun WifiBleSampleEntity.toMapPin(): MapPin? {
     val lat = latitude ?: return null

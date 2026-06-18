@@ -20,8 +20,6 @@ class AppSettingsStore(private val context: Context) {
         val upload = booleanPreferencesKey("upload_after_session")
         val export = booleanPreferencesKey("local_csv_export")
         val keepAwake = booleanPreferencesKey("keep_screen_awake")
-        val anonymizeSsid = booleanPreferencesKey("anonymize_ssid")
-        val anonymizeBleName = booleanPreferencesKey("anonymize_ble_name")
         val uploadDefaultAppliedForJwt = booleanPreferencesKey("upload_default_applied_for_jwt")
     }
 
@@ -34,8 +32,6 @@ class AppSettingsStore(private val context: Context) {
             uploadAfterSession = prefs[Keys.upload] ?: false,
             localCsvExport = prefs[Keys.export] ?: true,
             keepScreenAwake = prefs[Keys.keepAwake] ?: false,
-            anonymizeSsid = prefs[Keys.anonymizeSsid] ?: false,
-            anonymizeBleName = prefs[Keys.anonymizeBleName] ?: false,
         )
     }
 
@@ -49,8 +45,6 @@ class AppSettingsStore(private val context: Context) {
                 uploadAfterSession = prefs[Keys.upload] ?: false,
                 localCsvExport = prefs[Keys.export] ?: true,
                 keepScreenAwake = prefs[Keys.keepAwake] ?: false,
-                anonymizeSsid = prefs[Keys.anonymizeSsid] ?: false,
-                anonymizeBleName = prefs[Keys.anonymizeBleName] ?: false,
             )
             val next = transform(current)
             prefs[Keys.interval] = next.sampleIntervalMillis
@@ -60,8 +54,6 @@ class AppSettingsStore(private val context: Context) {
             prefs[Keys.upload] = next.uploadAfterSession
             prefs[Keys.export] = next.localCsvExport
             prefs[Keys.keepAwake] = next.keepScreenAwake
-            prefs[Keys.anonymizeSsid] = next.anonymizeSsid
-            prefs[Keys.anonymizeBleName] = next.anonymizeBleName
         }
     }
 

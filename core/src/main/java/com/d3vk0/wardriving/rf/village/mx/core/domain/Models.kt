@@ -18,8 +18,6 @@ data class SessionSettings(
     val uploadAfterSession: Boolean = false,
     val localCsvExport: Boolean = true,
     val keepScreenAwake: Boolean = false,
-    val anonymizeSsid: Boolean = false,
-    val anonymizeBleName: Boolean = false,
 )
 
 enum class SessionStatus { RUNNING, PAUSED, STOPPED }

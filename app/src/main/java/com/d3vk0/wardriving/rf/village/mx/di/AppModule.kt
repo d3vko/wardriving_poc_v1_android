@@ -48,7 +48,9 @@ object AppModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): WardrivingDatabase =
-        Room.databaseBuilder(context, WardrivingDatabase::class.java, "wardriving.db").build()
+        Room.databaseBuilder(context, WardrivingDatabase::class.java, "wardriving.db")
+            .addMigrations(WardrivingDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideDao(database: WardrivingDatabase): WardrivingDao = database.wardrivingDao()

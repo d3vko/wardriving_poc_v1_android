@@ -108,12 +108,12 @@ class WardrivingForegroundService : Service() {
     private suspend fun collectOnce(sessionId: String, settings: SessionSettings) {
         val location = latestLocation
         if (settings.wifiEnabled) {
-            val samples = wifiScanner.scan(sessionId, location, settings.anonymizeSsid)
+            val samples = wifiScanner.scan(sessionId, location)
                 .filter { duplicateFilter.shouldKeep("wifi:${it.mac}", it.timestamp) }
             repository.insertWifiBle(samples)
         }
         if (settings.bleEnabled) {
-            val samples = bleScanner.scan(sessionId, location, settings.anonymizeBleName)
+            val samples = bleScanner.scan(sessionId, location)
                 .filter { duplicateFilter.shouldKeep("ble:${it.mac}", it.timestamp) }
             repository.insertWifiBle(samples)
         }

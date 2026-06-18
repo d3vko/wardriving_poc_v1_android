@@ -45,21 +45,26 @@ lte_<session_id>_<timestamp>.csv
 Header:
 
 ```text
-Timestamp,Technology,State,MCC,MNC,LAC,CellID,Band,RSSI,RSRP,RSRQ,SINR,Operator,Longitude,Latitude
+Timestamp,Tecnología,TipoCelda,Estado,MCC,MNC,LAC,CellID,eNodeB,Sector,PCI,Banda,EARFCN,FreqDL_MHz,FreqUL_MHz,RSSI,RSRP,RSRQ,SINR,Operador,Longitud,Latitud
 ```
 
 Android API mapping:
 
+- `CellInfoLte` -> `Tecnología` and `TipoCelda` as `LTE`
+- `CellInfo.cellConnectionStatus` -> `Estado`
 - `CellIdentityLte.mccString` -> `MCC`
 - `CellIdentityLte.mncString` -> `MNC`
 - `CellIdentityLte.tac` -> `LAC`
 - `CellIdentityLte.ci` -> `CellID`
-- `CellIdentityLte.earfcn` -> derived `Band` when supported
+- `CellIdentityLte.ci / 256` -> `eNodeB`
+- `CellIdentityLte.ci % 256` -> `Sector`
+- `CellIdentityLte.pci` -> `PCI`
+- `CellIdentityLte.earfcn` -> `EARFCN`, derived `Banda`, `FreqDL_MHz`, and `FreqUL_MHz` when mapped
 - `CellSignalStrengthLte.dbm` -> `RSSI`
 - `CellSignalStrengthLte.rsrp` -> `RSRP`
 - `CellSignalStrengthLte.rsrq` -> `RSRQ`
 - `CellSignalStrengthLte.rssnr` -> `SINR`
-- `TelephonyManager.networkOperatorName` -> `Operator`
-- latest GPS fix -> `Longitude`, `Latitude`
+- `TelephonyManager.networkOperatorName` -> `Operador`
+- latest GPS fix -> `Longitud`, `Latitud`
 
 Unavailable Android values such as `CellInfo.UNAVAILABLE` are exported as empty strings.

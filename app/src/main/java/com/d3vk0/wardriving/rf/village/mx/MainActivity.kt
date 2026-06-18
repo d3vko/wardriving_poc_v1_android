@@ -496,8 +496,6 @@ private fun SettingsScreen(
         item { ToggleRow("Enable API upload after session", settings.uploadAfterSession) { viewModel.updateSettings { s -> s.copy(uploadAfterSession = it) } } }
         item { ToggleRow("Enable local CSV export", settings.localCsvExport) { viewModel.updateSettings { s -> s.copy(localCsvExport = it) } } }
         item { ToggleRow("Keep screen awake", settings.keepScreenAwake) { viewModel.updateSettings { s -> s.copy(keepScreenAwake = it) } } }
-        item { ToggleRow("Anonymize SSID", settings.anonymizeSsid) { viewModel.updateSettings { s -> s.copy(anonymizeSsid = it) } } }
-        item { ToggleRow("Anonymize BLE name", settings.anonymizeBleName) { viewModel.updateSettings { s -> s.copy(anonymizeBleName = it) } } }
         item {
             OutlinedButton(onClick = { viewModel.updateSettings { SessionSettings() } }) {
                 Text("Reset settings")
@@ -625,7 +623,7 @@ private fun MapPanel(title: String, pins: List<MapPin>, gpsStatus: String, modif
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("${pins.size}/100 pins", style = MaterialTheme.typography.labelMedium)
+                Text("${pins.size} mapped samples", style = MaterialTheme.typography.labelMedium)
             }
             if (pins.isEmpty()) {
                 Box(

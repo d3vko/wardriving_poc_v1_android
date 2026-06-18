@@ -76,6 +76,8 @@ data class LteSampleEntity(
     val mnc: String?,
     val lac: Int?,
     val cellId: Int?,
+    val pci: Int?,
+    val earfcn: Int?,
     val band: String?,
     val rssi: Int?,
     val rsrp: Int?,
@@ -97,5 +99,6 @@ data class PendingUploadEntity(
     val sampleCount: Int,
     val retryCount: Int,
     val lastError: String?,
+    val alreadyUploaded: Boolean = false,
     val uploadedAt: Long?,
 )

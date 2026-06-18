@@ -6,7 +6,7 @@ import com.d3vk0.wardriving.rf.village.mx.core.domain.GeoLocation
 import com.d3vk0.wardriving.rf.village.mx.core.local.WifiBleSampleEntity
 
 class WifiScanner(private val wifiManager: WifiManager) {
-    fun scan(sessionId: String, location: GeoLocation?, anonymizeSsid: Boolean): List<WifiBleSampleEntity> {
+    fun scan(sessionId: String, location: GeoLocation?): List<WifiBleSampleEntity> {
         val now = System.currentTimeMillis()
         val started = runCatching { wifiManager.startScan() }.getOrDefault(false)
         val results = runCatching { wifiManager.scanResults }.getOrDefault(emptyList())
@@ -17,7 +17,7 @@ class WifiScanner(private val wifiManager: WifiManager) {
                 timestamp = now,
                 type = "WIFI",
                 mac = bssid,
-                ssid = if (anonymizeSsid) "" else result.SSID.orEmpty(),
+                ssid = result.SSID.orEmpty(),
                 authMode = result.capabilities.orEmpty(),
                 channel = frequencyToChannel(result.frequency).toString(),
                 rssi = result.level,
