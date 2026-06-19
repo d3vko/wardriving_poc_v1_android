@@ -36,6 +36,7 @@ Native Android wardriving MVP in Kotlin with Jetpack Compose, Material 3, Room, 
    API_UPLOAD_TYPE_WIFI_BLE=wifi_ble_android
    API_UPLOAD_TYPE_LTE=lte_android
    APP_ACCENT_COLOR=#00A676
+   MAPLIBRE_STYLE_URL=https://tiles.openfreemap.org/styles/positron
    ```
 
    The app module reads values in this order: Gradle property, real environment variable, `.env`, default value. Sync Android Studio after editing `.env` because values are compiled into `BuildConfig`.
