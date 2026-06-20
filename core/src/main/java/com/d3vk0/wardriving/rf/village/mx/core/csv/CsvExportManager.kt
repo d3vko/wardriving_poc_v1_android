@@ -22,8 +22,9 @@ class CsvExportManager(
 
     suspend fun exportWifiBle(sessionId: String): File {
         val samples = dao.getWifiBleSamples(sessionId)
+        val session = requireNotNull(dao.getSession(sessionId)) { "Session not found: $sessionId" }
         val file = File(exportDir(), "wifi_ble_${sessionId}_${fileStamp.format(Date())}.csv")
-        file.writeText(wigleCsvFormatter.format(samples))
+        file.writeText(wigleCsvFormatter.format(samples, session.startedAt))
         return file
     }
 
@@ -48,9 +49,22 @@ class CsvExportManager(
         return zip
     }
 
+    suspend fun exportFilesForUpload(sessionId: String): List<SessionExportFile> {
+        val files = mutableListOf<SessionExportFile>()
+        val wifiBleCount = dao.getWifiBleSamples(sessionId).size
+        if (wifiBleCount > 0) files += SessionExportFile(exportWifiBle(sessionId), wifiBleCount, UploadFileKind.WIFI_BLE)
+        val lteCount = dao.getLteSamples(sessionId).size
+        if (lteCount > 0) files += SessionExportFile(exportLte(sessionId), lteCount, UploadFileKind.LTE)
+        return files
+    }
+
     private fun exportDir(): File {
         return File(context.getExternalFilesDir(null) ?: context.filesDir, "exports").apply {
             mkdirs()
         }
     }
 }
+
+enum class UploadFileKind { WIFI_BLE, LTE }
+
+data class SessionExportFile(val file: File, val sampleCount: Int, val kind: UploadFileKind)

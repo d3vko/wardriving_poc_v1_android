@@ -8,23 +8,31 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.d3vk0.wardriving.rf.village.mx.core.csv.CsvExportManager
+import com.d3vk0.wardriving.rf.village.mx.core.csv.UploadFileKind
 import com.d3vk0.wardriving.rf.village.mx.core.domain.ApiConfig
 import com.d3vk0.wardriving.rf.village.mx.core.domain.LiveCounters
 import com.d3vk0.wardriving.rf.village.mx.core.domain.MapPin
+import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionFilter
 import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionSettings
 import com.d3vk0.wardriving.rf.village.mx.core.local.WardrivingSessionEntity
 import com.d3vk0.wardriving.rf.village.mx.core.repository.AuthRepository
 import com.d3vk0.wardriving.rf.village.mx.core.repository.UploadAttemptResult
 import com.d3vk0.wardriving.rf.village.mx.core.repository.UploadRepository
+import com.d3vk0.wardriving.rf.village.mx.core.repository.SessionUploadState
 import com.d3vk0.wardriving.rf.village.mx.core.repository.WardrivingRepository
+import com.d3vk0.wardriving.rf.village.mx.core.repository.isOnPlatform
+import com.d3vk0.wardriving.rf.village.mx.core.repository.toUserFacingMessage
 import com.d3vk0.wardriving.rf.village.mx.core.settings.AppSettingsStore
+import com.d3vk0.wardriving.rf.village.mx.core.security.AuthTokenStore
 import com.d3vk0.wardriving.rf.village.mx.service.WardrivingForegroundService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
@@ -34,13 +42,19 @@ data class MainUiState(
     val authenticated: Boolean = false,
     val sessions: List<WardrivingSessionEntity> = emptyList(),
     val activeSessionId: String? = null,
+    val isStopping: Boolean = false,
     val counters: LiveCounters = LiveCounters(),
     val liveMapPins: List<MapPin> = emptyList(),
     val sessionDetailMapPins: List<MapPin> = emptyList(),
+    val sessionUploadState: SessionUploadState = SessionUploadState("No subido", true),
+    val uploadingSessionId: String? = null,
     val settings: SessionSettings = SessionSettings(),
     val status: String = "Idle",
     val lastExportPath: String? = null,
+    val sessionFilter: SessionFilter = SessionFilter.ALL,
 )
+
+data class UiErrorEvent(val message: String)
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -51,26 +65,53 @@ class MainViewModel @Inject constructor(
     private val csvExportManager: CsvExportManager,
     private val uploadRepository: UploadRepository,
     private val apiConfig: ApiConfig,
+    private val authTokenStore: AuthTokenStore,
 ) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(MainUiState(authenticated = authRepository.hasToken()))
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
+    private val _uiErrors = MutableSharedFlow<UiErrorEvent>(extraBufferCapacity = 8)
+    val uiErrors: SharedFlow<UiErrorEvent> = _uiErrors.asSharedFlow()
     private var countersJob: Job? = null
     private var countersSessionId: String? = null
     private var liveMapPinsJob: Job? = null
     private var liveMapPinsSessionId: String? = null
     private var sessionDetailMapPinsJob: Job? = null
+    private var sessionUploadJob: Job? = null
 
     init {
         applyAuthenticatedDefaults()
+        viewModelScope.launch {
+            authTokenStore.invalidations.collect { invalidation ->
+                _uiState.update {
+                    it.copy(
+                        authenticated = false,
+                        status = "Sesión API rechazada (HTTP ${invalidation.httpCode})",
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             settingsStore.settings.collect { settings ->
                 _uiState.update { it.copy(settings = settings) }
             }
         }
         viewModelScope.launch {
+            settingsStore.sessionFilter.collect { filter ->
+                _uiState.update { it.copy(sessionFilter = filter) }
+            }
+        }
+        viewModelScope.launch {
             wardrivingRepository.observeSessions().collect { sessions ->
-                val active = sessions.firstOrNull { it.status == "RUNNING" || it.status == "PAUSED" }
-                _uiState.update { it.copy(sessions = sessions, activeSessionId = active?.id) }
+                val storedActive = sessions.firstOrNull { it.status == "RUNNING" || it.status == "PAUSED" }
+                _uiState.update {
+                    val visibleActive = storedActive.takeUnless { _ -> it.isStopping }
+                    it.copy(
+                        sessions = sessions,
+                        activeSessionId = visibleActive?.id,
+                        isStopping = it.isStopping && storedActive != null,
+                    )
+                }
+                val active = storedActive.takeUnless { _uiState.value.isStopping }
                 active?.id?.let {
                     observeCounters(it)
                     observeLiveMapPins(it)
@@ -86,27 +127,32 @@ class MainViewModel @Inject constructor(
     }
 
     fun login(identifier: String, password: String) = viewModelScope.launch {
-        runCatching { authRepository.login(identifier, password) }
-            .onSuccess {
-                applyAuthenticatedDefaults()
-                _uiState.update { it.copy(authenticated = true, status = "Logged in") }
-            }
-            .onFailure { error -> _uiState.update { it.copy(status = error.message ?: "Login failed") } }
+        try {
+            authRepository.login(identifier, password)
+            applyAuthenticatedDefaults()
+            _uiState.update { it.copy(authenticated = true, status = "Logged in") }
+        } catch (error: Throwable) {
+            reportError(error, "Login failed")
+        }
     }
 
     fun register(identifier: String, password: String) = viewModelScope.launch {
-        runCatching { authRepository.register(identifier, password) }
-            .onSuccess {
-                applyAuthenticatedDefaults()
-                _uiState.update { it.copy(authenticated = true, status = "Registered") }
-            }
-            .onFailure { error -> _uiState.update { it.copy(status = error.message ?: "Register failed") } }
+        try {
+            authRepository.register(identifier, password)
+            applyAuthenticatedDefaults()
+            _uiState.update { it.copy(authenticated = true, status = "Registered") }
+        } catch (error: Throwable) {
+            reportError(error, "Register failed")
+        }
     }
 
     fun recover(identifier: String) = viewModelScope.launch {
-        runCatching { authRepository.recoverPassword(identifier) }
-            .onSuccess { _uiState.update { it.copy(status = "Recovery request sent") } }
-            .onFailure { error -> _uiState.update { it.copy(status = error.message ?: "Recovery failed") } }
+        try {
+            authRepository.recoverPassword(identifier)
+            _uiState.update { it.copy(status = "Recovery request sent") }
+        } catch (error: Throwable) {
+            reportError(error, "Recovery failed")
+        }
     }
 
     fun logout() {
@@ -130,12 +176,24 @@ class MainViewModel @Inject constructor(
     }
 
     fun stopSession() {
+        if (_uiState.value.isStopping) {
+            _uiState.update { it.copy(status = "La finalización ya está en curso") }
+            return
+        }
+        if (_uiState.value.activeSessionId == null) {
+            _uiState.update { it.copy(status = "No hay una sesión activa") }
+            return
+        }
         service(WardrivingForegroundService.ACTION_STOP)
-        _uiState.update { it.copy(status = "Stop requested") }
+        _uiState.update { it.copy(activeSessionId = null, isStopping = true, status = "Finalizando sesión") }
     }
 
     fun updateSettings(transform: (SessionSettings) -> SessionSettings) = viewModelScope.launch {
-        settingsStore.update(transform)
+        try {
+            settingsStore.update(transform)
+        } catch (error: Throwable) {
+            reportError(error, "No se pudo guardar la configuración")
+        }
     }
 
     fun applyAuthenticatedDefaults() = viewModelScope.launch {
@@ -144,35 +202,77 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun exportWifiBle() = export { csvExportManager.exportWifiBle(requireActiveSession()) }
+    fun exportWifiBle(sessionId: String) = export { csvExportManager.exportWifiBle(sessionId) }
 
-    fun exportLte() = export { csvExportManager.exportLte(requireActiveSession()) }
+    fun exportLte(sessionId: String) = export { csvExportManager.exportLte(sessionId) }
 
-    fun exportZip() = export { csvExportManager.exportZip(requireActiveSession()) }
+    fun exportZip(sessionId: String) = export { csvExportManager.exportZip(sessionId) }
 
-    fun uploadExports() = viewModelScope.launch {
-        runCatching {
-            val sessionId = requireActiveSession()
-            val wifiBle = csvExportManager.exportWifiBle(sessionId)
-            val lte = csvExportManager.exportLte(sessionId)
-            uploadRepository.enqueuePending(sessionId, apiConfig.wifiBleUploadType, wifiBle, sampleCount(wifiBle))
-            uploadRepository.enqueuePending(sessionId, apiConfig.lteUploadType, lte, sampleCount(lte))
-            uploadRepository.uploadAllPending()
-        }.onSuccess { results ->
-            val failure = results.filterIsInstance<UploadAttemptResult.Failure>().firstOrNull()
-            _uiState.update {
-                it.copy(
-                    status = failure?.message
-                        ?: if (results.isEmpty()) "No pending uploads" else "Uploads completed",
-                )
+    fun setSessionFilter(filter: SessionFilter) {
+        viewModelScope.launch {
+            settingsStore.saveSessionFilter(filter)
+        }
+    }
+
+    private fun switchToPlatformFilterIfNeeded() {
+        if (_uiState.value.sessionFilter != SessionFilter.PROCESSED) {
+            viewModelScope.launch {
+                settingsStore.saveSessionFilter(SessionFilter.PROCESSED)
             }
-        }.onFailure { error ->
-            _uiState.update { it.copy(status = error.message ?: "Upload failed") }
+        }
+    }
+
+    fun uploadSession(sessionId: String) {
+        if (_uiState.value.uploadingSessionId != null) {
+            viewModelScope.launch { reportError("Ya hay un upload en curso") }
+            return
+        }
+        _uiState.update { it.copy(uploadingSessionId = sessionId, status = "Preparando upload") }
+        viewModelScope.launch {
+            runCatching {
+                val exports = csvExportManager.exportFilesForUpload(sessionId)
+                if (exports.isEmpty()) return@runCatching emptyList<UploadAttemptResult>()
+                exports.forEach { export ->
+                    val type = when (export.kind) {
+                        UploadFileKind.WIFI_BLE -> apiConfig.wifiBleUploadType
+                        UploadFileKind.LTE -> apiConfig.lteUploadType
+                    }
+                    uploadRepository.enqueuePending(sessionId, type, export.file, export.sampleCount)
+                }
+                uploadRepository.uploadSessionPending(sessionId)
+            }.onSuccess { results ->
+                val failure = results.filterIsInstance<UploadAttemptResult.Failure>().firstOrNull()
+                val processing = results.filterIsInstance<UploadAttemptResult.Success>().any { !it.isProcessed }
+                if (failure != null) {
+                    reportError(failure.message)
+                } else if (results.isEmpty()) {
+                    reportError("Sin datos disponibles")
+                } else {
+                    switchToPlatformFilterIfNeeded()
+                }
+                _uiState.update {
+                    it.copy(
+                        status = failure?.message
+                            ?: when {
+                                results.isEmpty() -> "Sin datos disponibles"
+                                processing -> "Upload aceptado: Procesando"
+                                else -> "Upload procesado"
+                            },
+                    )
+                }
+            }.onFailure { error ->
+                reportError(error, "Upload failed")
+            }
+            _uiState.update { it.copy(uploadingSessionId = null) }
         }
     }
 
     fun saveLastExportAs(destination: android.net.Uri) = viewModelScope.launch {
-        val source = _uiState.value.lastExportPath?.let(::File)?.takeIf { it.exists() } ?: return@launch
+        val source = _uiState.value.lastExportPath?.let(::File)?.takeIf { it.exists() }
+        if (source == null) {
+            reportError("No hay una exportación disponible")
+            return@launch
+        }
         runCatching {
             getApplication<Application>().contentResolver.openOutputStream(destination)?.use { output ->
                 source.inputStream().use { input -> input.copyTo(output) }
@@ -180,18 +280,24 @@ class MainViewModel @Inject constructor(
         }.onSuccess {
             _uiState.update { it.copy(status = "Saved ${source.name}") }
         }.onFailure { error ->
-            _uiState.update { it.copy(status = error.message ?: "Save failed") }
+            reportError(error, "Save failed")
         }
     }
 
     fun shareLastExport() {
-        val file = _uiState.value.lastExportPath?.let(::File)?.takeIf { it.exists() } ?: return
-        val uri: Uri = FileProvider.getUriForFile(getApplication(), "${BuildConfig.APPLICATION_ID}.files", file)
-        val intent = Intent(Intent.ACTION_SEND)
-            .setType(if (file.extension == "zip") "application/zip" else "text/csv")
-            .putExtra(Intent.EXTRA_STREAM, uri)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        getApplication<Application>().startActivity(Intent.createChooser(intent, "Share export").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val file = _uiState.value.lastExportPath?.let(::File)?.takeIf { it.exists() }
+        if (file == null) {
+            viewModelScope.launch { reportError("No hay una exportación disponible") }
+            return
+        }
+        runCatching {
+            val uri: Uri = FileProvider.getUriForFile(getApplication(), "${BuildConfig.APPLICATION_ID}.files", file)
+            val intent = Intent(Intent.ACTION_SEND)
+                .setType(if (file.extension == "zip") "application/zip" else "text/csv")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            getApplication<Application>().startActivity(Intent.createChooser(intent, "Share export").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { error -> viewModelScope.launch { reportError(error, "No se pudo compartir la exportación") } }
     }
 
     fun deleteAllLocalData() = viewModelScope.launch {
@@ -210,10 +316,22 @@ class MainViewModel @Inject constructor(
     }
 
     fun observeSessionDetailMapPins(sessionId: String) {
+        if (_uiState.value.sessions.any { it.id == sessionId && it.uploaded }) {
+            switchToPlatformFilterIfNeeded()
+        }
         if (sessionDetailMapPinsJob?.isActive == true) sessionDetailMapPinsJob?.cancel()
         sessionDetailMapPinsJob = viewModelScope.launch {
             wardrivingRepository.observeLatestMapPins(sessionId).collect { pins ->
                 _uiState.update { it.copy(sessionDetailMapPins = pins) }
+            }
+        }
+        sessionUploadJob?.cancel()
+        sessionUploadJob = viewModelScope.launch {
+            uploadRepository.observeSessionUploadState(sessionId).collect { uploadState ->
+                _uiState.update { it.copy(sessionUploadState = uploadState) }
+                if (uploadState.isOnPlatform()) {
+                    switchToPlatformFilterIfNeeded()
+                }
             }
         }
     }
@@ -221,7 +339,16 @@ class MainViewModel @Inject constructor(
     private fun export(block: suspend () -> File) = viewModelScope.launch {
         runCatching { block() }
             .onSuccess { file -> _uiState.update { it.copy(lastExportPath = file.absolutePath, status = "Exported ${file.name}") } }
-            .onFailure { error -> _uiState.update { it.copy(status = error.message ?: "Export failed") } }
+            .onFailure { error -> reportError(error, "Export failed") }
+    }
+
+    private suspend fun reportError(error: Throwable, fallback: String) {
+        reportError(error.toUserFacingMessage(fallback))
+    }
+
+    private suspend fun reportError(message: String) {
+        _uiState.update { it.copy(status = message) }
+        _uiErrors.emit(UiErrorEvent(message))
     }
 
     private fun service(action: String) {
@@ -252,12 +379,4 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private suspend fun requireActiveSession(): String {
-        return _uiState.value.activeSessionId
-            ?: wardrivingRepository.getActiveSession()?.id
-            ?: wardrivingRepository.observeSessions().first().firstOrNull()?.id
-            ?: error("No session available")
-    }
-
-    private fun sampleCount(file: File): Int = file.readLines().drop(1).size
 }

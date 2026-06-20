@@ -5,6 +5,7 @@ import com.d3vk0.wardriving.rf.village.mx.core.remote.AuthRequest
 import com.d3vk0.wardriving.rf.village.mx.core.remote.PasswordRecoveryRequest
 import com.d3vk0.wardriving.rf.village.mx.core.remote.WardrivingApiService
 import com.d3vk0.wardriving.rf.village.mx.core.security.AuthTokenStorage
+import retrofit2.HttpException
 
 class AuthRepository(
     private val api: WardrivingApiService,
@@ -26,10 +27,11 @@ class AuthRepository(
     }
 
     suspend fun recoverPassword(identifier: String) {
-        api.recoverPassword(
+        val response = api.recoverPassword(
             config.passwordRecoveryPath,
             PasswordRecoveryRequest(username = identifier.takeUnless { it.contains("@") }, email = identifier.takeIf { it.contains("@") }),
         )
+        if (!response.isSuccessful) throw HttpException(response)
     }
 
     fun hasToken(): Boolean = !tokenStore.getToken().isNullOrBlank()

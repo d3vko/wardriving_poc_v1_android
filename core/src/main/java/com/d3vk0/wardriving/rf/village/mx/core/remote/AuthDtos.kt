@@ -1,5 +1,7 @@
 package com.d3vk0.wardriving.rf.village.mx.core.remote
 
+import com.google.gson.annotations.SerializedName
+
 data class AuthRequest(
     val username: String? = null,
     val email: String? = null,
@@ -17,8 +19,9 @@ data class AuthResponse(
     val username: String? = null,
 )
 
-data class UploadResponse(
+data class RemoteFileDto(
     val id: String? = null,
-    val status: String? = null,
-    val message: String? = null,
+    val source: String? = null,
+    @SerializedName("is_procesed") val isProcessed: Boolean?,
+    @SerializedName("hash_sha256") val hashSha256: String?,
 )

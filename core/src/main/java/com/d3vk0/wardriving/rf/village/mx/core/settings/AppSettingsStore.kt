@@ -4,8 +4,11 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionFilter
 import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionSettings
+import com.d3vk0.wardriving.rf.village.mx.core.domain.toStorageValue
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -21,6 +24,11 @@ class AppSettingsStore(private val context: Context) {
         val export = booleanPreferencesKey("local_csv_export")
         val keepAwake = booleanPreferencesKey("keep_screen_awake")
         val uploadDefaultAppliedForJwt = booleanPreferencesKey("upload_default_applied_for_jwt")
+        val sessionFilter = stringPreferencesKey("session_filter")
+    }
+
+    val sessionFilter: Flow<SessionFilter> = context.appSettingsDataStore.data.map { prefs ->
+        SessionFilter.fromStorageValue(prefs[Keys.sessionFilter])
     }
 
     val settings: Flow<SessionSettings> = context.appSettingsDataStore.data.map { prefs ->
@@ -63,6 +71,12 @@ class AppSettingsStore(private val context: Context) {
                 prefs[Keys.upload] = true
                 prefs[Keys.uploadDefaultAppliedForJwt] = true
             }
+        }
+    }
+
+    suspend fun saveSessionFilter(filter: SessionFilter) {
+        context.appSettingsDataStore.edit { prefs ->
+            prefs[Keys.sessionFilter] = filter.toStorageValue()
         }
     }
 }

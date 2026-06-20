@@ -28,5 +28,5 @@ interface WardrivingApiService {
         @Url path: String,
         @Part files: List<MultipartBody.Part>,
         @Part("device_source") deviceSource: RequestBody,
-    ): UploadResponse
+    ): Response<List<RemoteFileDto>>
 }

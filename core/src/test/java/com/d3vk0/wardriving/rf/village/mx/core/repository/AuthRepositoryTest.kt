@@ -4,9 +4,12 @@ import com.d3vk0.wardriving.rf.village.mx.core.domain.ApiConfig
 import com.d3vk0.wardriving.rf.village.mx.core.remote.AuthRequest
 import com.d3vk0.wardriving.rf.village.mx.core.remote.AuthResponse
 import com.d3vk0.wardriving.rf.village.mx.core.remote.PasswordRecoveryRequest
-import com.d3vk0.wardriving.rf.village.mx.core.remote.UploadResponse
+import com.d3vk0.wardriving.rf.village.mx.core.remote.RemoteFileDto
 import com.d3vk0.wardriving.rf.village.mx.core.remote.WardrivingApiService
 import com.d3vk0.wardriving.rf.village.mx.core.security.AuthTokenStorage
+import com.d3vk0.wardriving.rf.village.mx.core.security.AuthInvalidation
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.test.runTest
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -70,6 +73,7 @@ class AuthRepositoryTest {
 
     private class FakeTokenStore : AuthTokenStorage {
         var savedToken: String? = null
+        override val invalidations: SharedFlow<AuthInvalidation> = MutableSharedFlow()
 
         override fun getToken(): String? = savedToken
 
@@ -79,6 +83,10 @@ class AuthRepositoryTest {
 
         override fun clear() {
             savedToken = null
+        }
+
+        override fun invalidate(httpCode: Int) {
+            clear()
         }
     }
 
@@ -107,6 +115,6 @@ class AuthRepositoryTest {
             path: String,
             files: List<MultipartBody.Part>,
             deviceSource: RequestBody,
-        ): UploadResponse = UploadResponse()
+        ): retrofit2.Response<List<RemoteFileDto>> = retrofit2.Response.success(201, emptyList())
     }
 }

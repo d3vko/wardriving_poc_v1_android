@@ -72,4 +72,32 @@ class WigleCsvFormatterTest {
 
         assertEquals("AA:BB:CC:DD:EE:FF,lab,WPA2,1970-01-01 00:00:00,6,-45,,,,,WIFI", csv)
     }
+
+    @Test
+    fun firstSeenNeverPredatesSessionButPreservesValidSampleTime() {
+        val startedAt = 1_000_000L
+        fun sample(timestamp: Long, mac: String) = WifiBleSampleEntity(
+            sessionId = "s1",
+            timestamp = timestamp,
+            type = "WIFI",
+            mac = mac,
+            ssid = "lab",
+            authMode = "WPA2",
+            channel = "6",
+            rssi = -45,
+            latitude = 19.0,
+            longitude = -99.0,
+            altitudeMeters = null,
+            accuracyMeters = null,
+            rawPayload = null,
+        )
+
+        val rows = WigleCsvFormatter().format(
+            listOf(sample(500_000L, "AA"), sample(2_000_000L, "BB")),
+            sessionStartedAt = startedAt,
+        ).lines()
+
+        assertTrue(rows[1].contains("1970-01-01 00:16:40"))
+        assertTrue(rows[2].contains("1970-01-01 00:33:20"))
+    }
 }

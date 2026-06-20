@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,7 +36,11 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,12 +52,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -63,12 +71,16 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.d3vk0.wardriving.rf.village.mx.core.domain.MapPin
 import com.d3vk0.wardriving.rf.village.mx.core.domain.MapPinType
 import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionSettings
+import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionFilter
+import com.d3vk0.wardriving.rf.village.mx.core.domain.filterSessions
 import com.d3vk0.wardriving.rf.village.mx.core.local.WardrivingSessionEntity
 import com.d3vk0.wardriving.rf.village.mx.ui.theme.WardrivingTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.annotations.MarkerOptions
@@ -103,14 +115,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
     val context = LocalContext.current
-    var route by remember { mutableStateOf(if (uiState.authenticated) "dashboard" else "login") }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var route by remember { mutableStateOf(if (uiState.authenticated) AUTHENTICATED_START_ROUTE else "login") }
     var selectedSession by remember { mutableStateOf<WardrivingSessionEntity?>(null) }
     var permissionRequestAttempted by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
         val granted = results.values.all { it } && WardrivingPermissions.hasRequiredRuntimePermissions(context)
-        route = if (granted) "dashboard" else "settings"
+        route = if (granted) AUTHENTICATED_START_ROUTE else "settings"
     }
     val saveAsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(if (uiState.lastExportPath?.endsWith(".zip") == true) "application/zip" else "text/csv"),
@@ -132,7 +145,7 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
         if (uiState.authenticated) {
             viewModel.applyAuthenticatedDefaults()
             if (WardrivingPermissions.hasRequiredRuntimePermissions(context)) {
-                route = "dashboard"
+                route = AUTHENTICATED_START_ROUTE
             } else if (!permissionRequestAttempted) {
                 permissionRequestAttempted = true
                 permissionLauncher.launch(WardrivingPermissions.missingRuntimePermissions(context))
@@ -145,16 +158,21 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
         }
     }
 
+    LaunchedEffect(viewModel) {
+        viewModel.uiErrors.collectLatest { event ->
+            snackbarHostState.showSnackbar(
+                message = event.message,
+                withDismissAction = true,
+                duration = SnackbarDuration.Indefinite,
+            )
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("RF Village MX Wardriving") },
-                actions = {
-                    if (uiState.authenticated && route != "splash") {
-                        TextButton(onClick = { route = "dashboard" }) { Text("Dashboard") }
-                        TextButton(onClick = { route = "settings" }) { Text("Settings") }
-                    }
-                },
             )
         },
         bottomBar = {
@@ -189,18 +207,7 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
                 "recovery" -> RecoveryScreen(viewModel::recover)
                 "dashboard" -> DashboardScreen(
                     uiState = uiState,
-                    onStart = { if (requestMissingPermissions()) viewModel.startSession() },
-                    onPause = viewModel::pauseSession,
-                    onResume = viewModel::resumeSession,
-                    onStop = viewModel::stopSession,
-                    onLive = { route = "live" },
-                    onExport = { route = "export" },
                     onAdvanced = { route = "advanced" },
-                    onSessionDetail = {
-                        selectedSession = it
-                        viewModel.observeSessionDetailMapPins(it.id)
-                        route = "sessionDetail"
-                    },
                 )
                 "live" -> LiveScanScreen(
                     uiState,
@@ -209,12 +216,23 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
                     viewModel::resumeSession,
                     viewModel::stopSession,
                 )
-                "sessions" -> SessionsScreen(uiState.sessions) {
+                "sessions" -> SessionsScreen(
+                    sessions = uiState.sessions,
+                    selectedFilter = uiState.sessionFilter,
+                    onFilterChange = viewModel::setSessionFilter,
+                ) {
                     selectedSession = it
                     viewModel.observeSessionDetailMapPins(it.id)
                     route = "sessionDetail"
                 }
-                "sessionDetail" -> SessionDetailScreen(selectedSession, uiState.sessionDetailMapPins)
+                "sessionDetail" -> SessionDetailScreen(
+                    session = selectedSession,
+                    pins = uiState.sessionDetailMapPins,
+                    uploadState = uiState.sessionUploadState,
+                    uploadInProgress = uiState.uploadingSessionId == selectedSession?.id,
+                    onBack = { route = "sessions" },
+                    onUpload = viewModel::uploadSession,
+                )
                 "export" -> ExportUploadScreen(
                     uiState = uiState,
                     viewModel = viewModel,
@@ -237,15 +255,8 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
 
 @Composable
 private fun FieldBottomNav(currentRoute: String, onRoute: (String) -> Unit) {
-    val items = listOf(
-        "dashboard" to "Dashboard",
-        "live" to "Live",
-        "sessions" to "Sessions",
-        "export" to "Export",
-        "settings" to "Settings",
-    )
     NavigationBar {
-        items.forEach { (route, label) ->
+        FIELD_NAVIGATION_ITEMS.forEach { (route, label) ->
             val iconRes = when (route) {
                 "dashboard" -> R.drawable.dashboard
                 "live" -> R.drawable.live
@@ -280,14 +291,42 @@ private fun FieldBottomNav(currentRoute: String, onRoute: (String) -> Unit) {
 @Composable
 private fun SessionsScreen(
     sessions: List<WardrivingSessionEntity>,
+    selectedFilter: SessionFilter,
+    onFilterChange: (SessionFilter) -> Unit,
     onSessionDetail: (WardrivingSessionEntity) -> Unit,
 ) {
+    val visibleSessions = filterSessions(sessions, selectedFilter)
+    val emptyMessage = when (selectedFilter) {
+        SessionFilter.UNPROCESSED -> "No hay sesiones solo locales."
+        SessionFilter.PROCESSED -> "No hay sesiones en plataforma."
+        SessionFilter.ALL -> "No saved sessions yet."
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Sessions", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
-        if (sessions.isEmpty()) {
-            item { EmptyCard("No saved sessions yet.") }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SessionFilter.entries.forEach { filter ->
+                    if (filter == selectedFilter) {
+                        Button(
+                            onClick = { onFilterChange(filter) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text(filter.label) }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onFilterChange(filter) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text(filter.label) }
+                    }
+                }
+            }
+        }
+        if (visibleSessions.isEmpty()) {
+            item { EmptyCard(emptyMessage) }
         } else {
-            items(sessions) { SessionRow(it, onSessionDetail) }
+            items(visibleSessions, key = WardrivingSessionEntity::id) { SessionRow(it, onSessionDetail) }
         }
     }
 }
@@ -349,20 +388,10 @@ private fun RecoveryScreen(onRecover: (String) -> Unit) {
 @Composable
 private fun DashboardScreen(
     uiState: MainUiState,
-    onStart: () -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onStop: () -> Unit,
-    onLive: () -> Unit,
-    onExport: () -> Unit,
     onAdvanced: () -> Unit,
-    onSessionDetail: (WardrivingSessionEntity) -> Unit,
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Field dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
-        item {
-            FieldModeControls(onStart, onPause, onResume, onStop)
-        }
         item {
             StatusChipRow(uiState)
         }
@@ -377,19 +406,7 @@ private fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().aspectRatio(1.55f),
             )
         }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onLive) { Text("Live scan") }
-                OutlinedButton(onClick = onExport) { Text("Export/upload") }
-                OutlinedButton(onClick = onAdvanced) { Text("Advanced LTE/AT") }
-            }
-        }
-        item { Text("Session history", style = MaterialTheme.typography.titleLarge) }
-        if (uiState.sessions.isEmpty()) {
-            item { EmptyCard("No sessions yet. Start a field session to collect samples.") }
-        } else {
-            items(uiState.sessions.take(5)) { SessionRow(it, onSessionDetail) }
-        }
+        item { OutlinedButton(onClick = onAdvanced) { Text("Advanced LTE/AT") } }
     }
 }
 
@@ -410,39 +427,64 @@ private fun LiveScanScreen(
                 modifier = Modifier.fillMaxWidth().aspectRatio(1.15f),
             )
         }
-        item { FieldModeControls(onStart, onPause, onResume, onStop) }
+        item { FieldModeControls(onStart, onPause, onResume, onStop, uiState) }
         item { CounterGrid(uiState) }
-        item { Text("Upload/export status: ${uiState.counters.uploadStatus}", style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
 @Composable
 private fun ExportUploadScreen(uiState: MainUiState, viewModel: MainViewModel, onSaveAs: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Export and upload", style = MaterialTheme.typography.headlineSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = viewModel::exportWifiBle) { Text("Export Wi-Fi/BLE CSV") }
-            Button(onClick = viewModel::exportLte) { Text("Export LTE CSV") }
+    var selectedSessionId by remember(uiState.sessions) { mutableStateOf(uiState.sessions.firstOrNull()?.id) }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Exportar sesión", style = MaterialTheme.typography.headlineSmall) }
+        if (uiState.sessions.isEmpty()) {
+            item { EmptyCard("No hay sesiones disponibles.") }
+        } else {
+            items(uiState.sessions) { session ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = selectedSessionId == session.id, onClick = { selectedSessionId = session.id })
+                    Text("${formatDate(session.startedAt)} · ${session.status}")
+                }
+            }
         }
+        item {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = viewModel::exportZip) { Text("Export ZIP") }
+            Button(onClick = { selectedSessionId?.let(viewModel::exportWifiBle) }, enabled = selectedSessionId != null) { Text("Wi-Fi/BLE CSV") }
+            Button(onClick = { selectedSessionId?.let(viewModel::exportLte) }, enabled = selectedSessionId != null) { Text("LTE CSV") }
+        }
+        }
+        item {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { selectedSessionId?.let(viewModel::exportZip) }, enabled = selectedSessionId != null) { Text("ZIP") }
             OutlinedButton(onClick = viewModel::shareLastExport, enabled = uiState.lastExportPath != null) { Text("Share exported files") }
             OutlinedButton(onClick = onSaveAs, enabled = uiState.lastExportPath != null) { Text("Save As") }
         }
-        Button(onClick = viewModel::uploadExports, enabled = uiState.sessions.isNotEmpty()) { Text("Upload exported files to API") }
-        Text("Save As uses Android Storage Access Framework so the file can be written to Downloads or any selected document provider.")
-        Text("Last export: ${uiState.lastExportPath ?: "None"}")
+        }
+        item { Text("Save As uses Android Storage Access Framework so the file can be written to Downloads or any selected document provider.") }
+        item { Text("Last export: ${uiState.lastExportPath ?: "None"}") }
     }
 }
 
 @Composable
-private fun SessionDetailScreen(session: WardrivingSessionEntity?, pins: List<MapPin>) {
+private fun SessionDetailScreen(
+    session: WardrivingSessionEntity?,
+    pins: List<MapPin>,
+    uploadState: com.d3vk0.wardriving.rf.village.mx.core.repository.SessionUploadState,
+    uploadInProgress: Boolean,
+    onBack: () -> Unit,
+    onUpload: (String) -> Unit,
+) {
     if (session == null) {
         Text("No session selected")
         return
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Session detail", style = MaterialTheme.typography.headlineSmall) }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = onBack) { Text("Volver a Sessions") }
+                Text("Session detail", style = MaterialTheme.typography.headlineSmall)
+            }
+        }
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -452,8 +494,22 @@ private fun SessionDetailScreen(session: WardrivingSessionEntity?, pins: List<Ma
                     Text("Ended: ${session.endedAt?.let(::formatDate) ?: "Active"}")
                     Text("Device source: ${session.deviceSource}")
                     Text("Wi-Fi: ${session.wifiEnabled} | BLE: ${session.bleEnabled} | LTE: ${session.lteEnabled}")
-                    Text("Uploaded: ${session.uploaded}")
+                    Text("Upload: ${uploadState.label}")
+                    Text("Wi-Fi/BLE: ${uploadState.wifiBleLabel}")
+                    Text("LTE: ${uploadState.lteLabel}")
                     Text("Local export path: ${session.localExportPath ?: "None"}")
+                    Button(
+                        onClick = { onUpload(session.id) },
+                        enabled = uploadState.canUpload && !uploadInProgress && session.status == "STOPPED",
+                    ) {
+                        Text(
+                            when {
+                                uploadInProgress -> "Subiendo…"
+                                uploadState.label == "Procesando" -> "Procesando en API"
+                                else -> "Subir sesión"
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -493,7 +549,6 @@ private fun SettingsScreen(
         item { ToggleRow("Enable Wi-Fi scanning", settings.wifiEnabled) { viewModel.updateSettings { s -> s.copy(wifiEnabled = it) } } }
         item { ToggleRow("Enable BLE scanning", settings.bleEnabled) { viewModel.updateSettings { s -> s.copy(bleEnabled = it) } } }
         item { ToggleRow("Enable LTE scanning", settings.lteEnabled) { viewModel.updateSettings { s -> s.copy(lteEnabled = it) } } }
-        item { ToggleRow("Enable API upload after session", settings.uploadAfterSession) { viewModel.updateSettings { s -> s.copy(uploadAfterSession = it) } } }
         item { ToggleRow("Enable local CSV export", settings.localCsvExport) { viewModel.updateSettings { s -> s.copy(localCsvExport = it) } } }
         item { ToggleRow("Keep screen awake", settings.keepScreenAwake) { viewModel.updateSettings { s -> s.copy(keepScreenAwake = it) } } }
         item {
@@ -531,12 +586,18 @@ private fun AdvancedAtModemScreen() {
 }
 
 @Composable
-private fun FieldModeControls(onStart: () -> Unit, onPause: () -> Unit, onResume: () -> Unit, onStop: () -> Unit) {
+private fun FieldModeControls(
+    onStart: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+    uiState: MainUiState,
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = onStart, modifier = Modifier.weight(1f).height(56.dp)) { Text("Start") }
-        OutlinedButton(onClick = onPause, modifier = Modifier.weight(1f).height(56.dp)) { Text("Pause") }
-        OutlinedButton(onClick = onResume, modifier = Modifier.weight(1f).height(56.dp)) { Text("Resume") }
-        OutlinedButton(onClick = onStop, modifier = Modifier.weight(1f).height(56.dp)) { Text("Stop") }
+        Button(onClick = onStart, enabled = uiState.activeSessionId == null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Start") }
+        OutlinedButton(onClick = onPause, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Pause") }
+        OutlinedButton(onClick = onResume, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Resume") }
+        OutlinedButton(onClick = onStop, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text(if (uiState.isStopping) "Stopping…" else "Stop") }
     }
 }
 
@@ -581,11 +642,14 @@ private fun StatusLine(uiState: MainUiState) {
 
 @Composable
 private fun AppLogo() {
-    Card(Modifier.size(88.dp)) {
-        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text("RF", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        }
-    }
+    Image(
+        painter = painterResource(R.mipmap.ic_launcher),
+        contentDescription = "RF Village MX Wardriving",
+        modifier = Modifier
+            .size(88.dp)
+            .clip(MaterialTheme.shapes.medium),
+        contentScale = ContentScale.Crop,
+    )
 }
 
 @Composable
@@ -619,6 +683,8 @@ private fun EmptyCard(message: String) {
 
 @Composable
 private fun MapPanel(title: String, pins: List<MapPin>, gpsStatus: String, modifier: Modifier = Modifier) {
+    var expanded by remember { mutableStateOf(false) }
+    val controller = remember { WardrivingMapController() }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -633,7 +699,23 @@ private fun MapPanel(title: String, pins: List<MapPin>, gpsStatus: String, modif
                     Text("No GPS-backed samples yet. $gpsStatus", modifier = Modifier.padding(16.dp))
                 }
             } else {
-                MapLibreWardrivingMap(pins = pins, modifier = modifier)
+                Box {
+                    MapLibreWardrivingMap(
+                        pins = pins,
+                        controller = controller,
+                        modifier = if (expanded) Modifier.fillMaxWidth().height(520.dp) else modifier,
+                    )
+                    Column(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        OutlinedButton(onClick = controller::zoomIn) { Text("+") }
+                        OutlinedButton(onClick = controller::zoomOut) { Text("−") }
+                        OutlinedButton(onClick = controller::centerNewest) { Text("Reciente") }
+                        OutlinedButton(onClick = controller::fitAll) { Text("Ver todos") }
+                        OutlinedButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Reducir" else "Ampliar") }
+                    }
+                }
             }
             MapLegend()
         }
@@ -656,13 +738,49 @@ private fun LegendDot(color: Color, label: String) {
     }
 }
 
+private class WardrivingMapController {
+    var zoomInAction: () -> Unit = {}
+    var zoomOutAction: () -> Unit = {}
+    var centerNewestAction: () -> Unit = {}
+    var fitAllAction: () -> Unit = {}
+    fun zoomIn() = zoomInAction()
+    fun zoomOut() = zoomOutAction()
+    fun centerNewest() = centerNewestAction()
+    fun fitAll() = fitAllAction()
+}
+
 @Composable
-private fun MapLibreWardrivingMap(pins: List<MapPin>, modifier: Modifier = Modifier) {
+private fun MapLibreWardrivingMap(
+    pins: List<MapPin>,
+    controller: WardrivingMapController,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mapView = remember {
         MapLibre.getInstance(context)
         MapView(context).apply { onCreate(null) }
+    }
+    var styleRequested by remember { mutableStateOf(false) }
+    var styleLoaded by remember { mutableStateOf(false) }
+    var cameraInitialized by remember { mutableStateOf(false) }
+    SideEffect {
+        controller.zoomInAction = {
+            mapView.getMapAsync { map -> map.animateCamera(CameraUpdateFactory.zoomIn()) }
+        }
+        controller.zoomOutAction = {
+            mapView.getMapAsync { map -> map.animateCamera(CameraUpdateFactory.zoomOut()) }
+        }
+        controller.centerNewestAction = {
+            pins.firstOrNull()?.let { newest ->
+                mapView.getMapAsync { map ->
+                    map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(newest.latitude, newest.longitude), 15.0))
+                }
+            }
+        }
+        controller.fitAllAction = {
+            mapView.getMapAsync { map -> map.fitPins(pins) }
+        }
     }
     DisposableEffect(lifecycleOwner, mapView) {
         val observer = LifecycleEventObserver { _, event ->
@@ -681,30 +799,59 @@ private fun MapLibreWardrivingMap(pins: List<MapPin>, modifier: Modifier = Modif
             mapView.onDestroy()
         }
     }
+    LaunchedEffect(pins, styleLoaded) {
+        if (!styleLoaded) return@LaunchedEffect
+        mapView.getMapAsync { map ->
+            map.clear()
+            val iconFactory = IconFactory.getInstance(context)
+            pins.forEach { pin ->
+                map.addMarker(
+                    MarkerOptions()
+                        .position(LatLng(pin.latitude, pin.longitude))
+                        .title(pin.label)
+                        .snippet("${pin.type.name} ${pin.rssiOrSignal?.let { "$it dBm" } ?: ""}".trim())
+                        .icon(iconFactory.fromBitmap(pinBitmap(pin.type))),
+                )
+            }
+            if (!cameraInitialized) {
+                cameraInitialized = true
+                pins.firstOrNull()?.let { newest ->
+                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(newest.latitude, newest.longitude), 15.0))
+                }
+            }
+        }
+    }
     AndroidView(
         modifier = modifier,
         factory = { mapView },
         update = {
             mapView.getMapAsync { map ->
-                map.setStyle(BuildConfig.MAPLIBRE_STYLE_URL) {
-                    map.clear()
-                    val iconFactory = IconFactory.getInstance(context)
-                    pins.forEach { pin ->
-                        map.addMarker(
-                            MarkerOptions()
-                                .position(LatLng(pin.latitude, pin.longitude))
-                                .title(pin.label)
-                                .snippet("${pin.type.name} ${pin.rssiOrSignal?.let { "$it dBm" } ?: ""}".trim())
-                                .icon(iconFactory.fromBitmap(pinBitmap(pin.type))),
-                        )
-                    }
-                    pins.firstOrNull()?.let { newest ->
-                        map.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(newest.latitude, newest.longitude), 15.0))
+                map.uiSettings.apply {
+                    isScrollGesturesEnabled = true
+                    isZoomGesturesEnabled = true
+                    isCompassEnabled = true
+                }
+                if (!styleRequested) {
+                    styleRequested = true
+                    map.setStyle(BuildConfig.MAPLIBRE_STYLE_URL) {
+                        styleLoaded = true
                     }
                 }
             }
         },
     )
+}
+
+private fun org.maplibre.android.maps.MapLibreMap.fitPins(pins: List<MapPin>) {
+    if (pins.isEmpty()) return
+    if (pins.size == 1) {
+        animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(pins[0].latitude, pins[0].longitude), 15.0))
+        return
+    }
+    val bounds = LatLngBounds.Builder()
+        .includes(pins.map { LatLng(it.latitude, it.longitude) })
+        .build()
+    animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 64))
 }
 
 private fun pinBitmap(type: MapPinType): Bitmap {

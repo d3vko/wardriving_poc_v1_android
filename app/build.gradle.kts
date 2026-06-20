@@ -10,13 +10,14 @@ val dotEnv = loadDotEnv(rootProject.file(".env"))
 android {
     namespace = "com.d3vk0.wardriving.rf.village.mx"
     compileSdk = 34
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.d3vk0.wardriving.rf.village.mx"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = configInt("APP_VERSION_CODE", 1)
+        versionName = configValue("APP_VERSION_NAME", "0.0.2")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -58,13 +59,39 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    applicationVariants.configureEach {
+        val apkBasename = configValue("APP_APK_BASENAME", "wardriving")
+        val outputName = when (buildType.name) {
+            "release" -> "$apkBasename-release.apk"
+            "debug" -> "$apkBasename.apk"
+            else -> "$apkBasename-${buildType.name}.apk"
+        }
+        outputs.configureEach {
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = outputName
+        }
+    }
 }
 
-fun configString(name: String, defaultValue: String): String {
-    val value = providers.gradleProperty(name).orNull
+fun configValue(name: String, defaultValue: String): String {
+    return providers.gradleProperty(name).orNull
         ?: providers.environmentVariable(name).orNull
         ?: dotEnv[name]
         ?: defaultValue
+}
+
+fun configInt(name: String, defaultValue: Int): Int =
+    configValue(name, defaultValue.toString()).toIntOrNull() ?: defaultValue
+
+fun configString(name: String, defaultValue: String): String {
+    val value = configValue(name, defaultValue)
     return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 }
 

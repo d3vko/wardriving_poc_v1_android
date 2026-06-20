@@ -53,9 +53,8 @@ class WardrivingRepository(
         dao.updateSessionStatus(sessionId, SessionStatus.RUNNING.name, null)
     }
 
-    suspend fun stopSession(sessionId: String) {
-        dao.updateSessionStatus(sessionId, SessionStatus.STOPPED.name, System.currentTimeMillis())
-    }
+    suspend fun stopSession(sessionId: String): Boolean =
+        dao.finishActiveSession(sessionId, System.currentTimeMillis()) == 1
 
     suspend fun markSessionExported(sessionId: String, localExportPath: String, uploaded: Boolean = false) {
         dao.updateSessionExport(sessionId, uploaded, localExportPath)

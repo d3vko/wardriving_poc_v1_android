@@ -89,7 +89,10 @@ data class LteSampleEntity(
     val rawPayload: String?,
 )
 
-@Entity(tableName = "pending_uploads", indices = [Index("sessionId"), Index("uploadType")])
+@Entity(
+    tableName = "pending_uploads",
+    indices = [Index(value = ["sessionId", "uploadType"], unique = true)],
+)
 data class PendingUploadEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sessionId: String,
@@ -99,6 +102,10 @@ data class PendingUploadEntity(
     val sampleCount: Int,
     val retryCount: Int,
     val lastError: String?,
-    val alreadyUploaded: Boolean = false,
+    val remoteId: String?,
+    val remoteSource: String?,
+    val remoteHashSha256: String?,
+    val isProcessed: Boolean?,
+    val responseReceivedAt: Long?,
     val uploadedAt: Long?,
 )

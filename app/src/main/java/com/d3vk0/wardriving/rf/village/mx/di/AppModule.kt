@@ -49,7 +49,7 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): WardrivingDatabase =
         Room.databaseBuilder(context, WardrivingDatabase::class.java, "wardriving.db")
-            .addMigrations(WardrivingDatabase.MIGRATION_1_2)
+            .addMigrations(WardrivingDatabase.MIGRATION_1_2, WardrivingDatabase.MIGRATION_2_3)
             .build()
 
     @Provides
@@ -62,7 +62,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideApi(config: ApiConfig, tokenStore: AuthTokenStore): WardrivingApiService =
-        ApiClientFactory { tokenStore.getToken() }.create(config)
+        ApiClientFactory(
+            tokenProvider = tokenStore::getToken,
+            onAuthenticationRejected = tokenStore::invalidate,
+        ).create(config)
 
     @Provides
     @Singleton

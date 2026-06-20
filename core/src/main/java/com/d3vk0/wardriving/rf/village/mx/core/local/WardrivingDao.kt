@@ -14,6 +14,9 @@ interface WardrivingDao {
     @Query("UPDATE wardriving_sessions SET status = :status, endedAt = :endedAt WHERE id = :sessionId")
     suspend fun updateSessionStatus(sessionId: String, status: String, endedAt: Long?)
 
+    @Query("UPDATE wardriving_sessions SET status = 'STOPPED', endedAt = :endedAt WHERE id = :sessionId AND status IN ('RUNNING', 'PAUSED')")
+    suspend fun finishActiveSession(sessionId: String, endedAt: Long): Int
+
     @Query("UPDATE wardriving_sessions SET uploaded = :uploaded, localExportPath = :localExportPath WHERE id = :sessionId")
     suspend fun updateSessionExport(sessionId: String, uploaded: Boolean, localExportPath: String?)
 
@@ -81,14 +84,64 @@ interface WardrivingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertPendingUpload(upload: PendingUploadEntity): Long
 
-    @Query("SELECT * FROM pending_uploads WHERE alreadyUploaded = 0 ORDER BY createdAt ASC")
+    @Query(
+        """
+        SELECT * FROM pending_uploads AS candidate
+        WHERE candidate.isProcessed IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM pending_uploads AS processing
+              WHERE processing.sessionId = candidate.sessionId
+                AND processing.isProcessed = 0
+          )
+        ORDER BY candidate.createdAt ASC
+        """,
+    )
     suspend fun getPendingUploads(): List<PendingUploadEntity>
+
+    @Query(
+        """
+        SELECT * FROM pending_uploads AS candidate
+        WHERE candidate.sessionId = :sessionId
+          AND candidate.isProcessed IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM pending_uploads AS processing
+              WHERE processing.sessionId = candidate.sessionId
+                AND processing.isProcessed = 0
+          )
+        ORDER BY candidate.createdAt ASC
+        """,
+    )
+    suspend fun getPendingUploads(sessionId: String): List<PendingUploadEntity>
+
+    @Query("SELECT * FROM pending_uploads WHERE sessionId = :sessionId AND uploadType = :uploadType LIMIT 1")
+    suspend fun getPendingUpload(sessionId: String, uploadType: String): PendingUploadEntity?
+
+    @Query("SELECT * FROM pending_uploads WHERE sessionId = :sessionId ORDER BY uploadType")
+    fun observePendingUploads(sessionId: String): Flow<List<PendingUploadEntity>>
+
+    @Query("SELECT * FROM pending_uploads WHERE sessionId = :sessionId ORDER BY uploadType")
+    suspend fun getSessionUploads(sessionId: String): List<PendingUploadEntity>
 
     @Query("UPDATE pending_uploads SET retryCount = retryCount + 1, lastError = :error WHERE id = :id")
     suspend fun markUploadFailed(id: Long, error: String)
 
-    @Query("UPDATE pending_uploads SET alreadyUploaded = 1, uploadedAt = :uploadedAt, lastError = NULL WHERE id = :id")
-    suspend fun markUploadSucceeded(id: Long, uploadedAt: Long)
+    @Query("""
+        UPDATE pending_uploads SET remoteId = :remoteId, remoteSource = :remoteSource,
+            remoteHashSha256 = :remoteHashSha256, isProcessed = :isProcessed,
+            responseReceivedAt = :receivedAt, uploadedAt = :receivedAt, lastError = NULL
+        WHERE id = :id
+    """)
+    suspend fun markUploadAccepted(
+        id: Long,
+        remoteId: String?,
+        remoteSource: String?,
+        remoteHashSha256: String,
+        isProcessed: Boolean,
+        receivedAt: Long,
+    )
+
+    @Query("UPDATE wardriving_sessions SET uploaded = :uploaded WHERE id = :sessionId")
+    suspend fun updateSessionUploaded(sessionId: String, uploaded: Boolean)
 
     @Query("SELECT * FROM pending_uploads WHERE id = :id")
     suspend fun getPendingUpload(id: Long): PendingUploadEntity?

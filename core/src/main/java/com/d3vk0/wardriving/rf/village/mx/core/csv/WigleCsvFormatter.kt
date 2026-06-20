@@ -20,7 +20,7 @@ class WigleCsvFormatter {
         timeZone = TimeZone.getTimeZone("UTC")
     }
 
-    fun format(samples: List<WifiBleSampleEntity>): String {
+    fun format(samples: List<WifiBleSampleEntity>, sessionStartedAt: Long = Long.MIN_VALUE): String {
         return buildString {
             appendLine(HEADER)
             samples.forEach { sample ->
@@ -29,7 +29,7 @@ class WigleCsvFormatter {
                         sample.mac,
                         sample.ssid,
                         sample.authMode,
-                        dateFormat.format(Date(sample.timestamp)),
+                        dateFormat.format(Date(maxOf(sample.timestamp, sessionStartedAt))),
                         sample.channel,
                         sample.rssi,
                         CsvDecimalFormatter.latitude(sample.latitude),

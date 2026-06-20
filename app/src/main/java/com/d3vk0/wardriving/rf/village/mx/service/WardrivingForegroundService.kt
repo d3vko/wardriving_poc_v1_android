@@ -10,23 +10,17 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.d3vk0.wardriving.rf.village.mx.MainActivity
 import com.d3vk0.wardriving.rf.village.mx.R
 import com.d3vk0.wardriving.rf.village.mx.core.ble.BleScanner
-import com.d3vk0.wardriving.rf.village.mx.core.csv.CsvExportManager
-import com.d3vk0.wardriving.rf.village.mx.core.domain.ApiConfig
 import com.d3vk0.wardriving.rf.village.mx.core.domain.GeoLocation
 import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionSettings
 import com.d3vk0.wardriving.rf.village.mx.core.duplicate.DuplicateFilter
 import com.d3vk0.wardriving.rf.village.mx.core.location.LocationTracker
-import com.d3vk0.wardriving.rf.village.mx.core.repository.UploadRepository
 import com.d3vk0.wardriving.rf.village.mx.core.repository.WardrivingRepository
 import com.d3vk0.wardriving.rf.village.mx.core.settings.AppSettingsStore
 import com.d3vk0.wardriving.rf.village.mx.core.telephony.TelephonyScanner
 import com.d3vk0.wardriving.rf.village.mx.core.wifi.WifiScanner
-import com.d3vk0.wardriving.rf.village.mx.worker.UploadWorker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +30,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.io.File
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -47,13 +40,11 @@ class WardrivingForegroundService : Service() {
     @Inject lateinit var wifiScanner: WifiScanner
     @Inject lateinit var bleScanner: BleScanner
     @Inject lateinit var telephonyScanner: TelephonyScanner
-    @Inject lateinit var csvExportManager: CsvExportManager
-    @Inject lateinit var uploadRepository: UploadRepository
-    @Inject lateinit var apiConfig: ApiConfig
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var collectionJob: Job? = null
     private var locationJob: Job? = null
+    private var stopJob: Job? = null
     private var currentSessionId: String? = null
     private var latestLocation: GeoLocation? = null
     private var paused = false
@@ -141,32 +132,19 @@ class WardrivingForegroundService : Service() {
     }
 
     private fun stopCollection() {
-        val sessionId = currentSessionId
+        if (stopJob?.isActive == true) return
+        val inMemorySessionId = currentSessionId
+        currentSessionId = null
         collectionJob?.cancel()
+        collectionJob = null
         locationJob?.cancel()
-        if (sessionId == null) {
-            stopSelf()
-            return
-        }
-        serviceScope.launch {
-            val settings = settingsStore.settings.first()
-            repository.stopSession(sessionId)
-            if (settings.localCsvExport || settings.uploadAfterSession) {
-                val wifiBle = csvExportManager.exportWifiBle(sessionId)
-                val lte = csvExportManager.exportLte(sessionId)
-                repository.markSessionExported(sessionId, "${wifiBle.absolutePath};${lte.absolutePath}")
-                if (settings.uploadAfterSession) {
-                    uploadRepository.enqueuePending(sessionId, apiConfig.wifiBleUploadType, wifiBle, sampleCount(wifiBle))
-                    uploadRepository.enqueuePending(sessionId, apiConfig.lteUploadType, lte, sampleCount(lte))
-                    WorkManager.getInstance(applicationContext)
-                        .enqueue(OneTimeWorkRequestBuilder<UploadWorker>().build())
-                }
-            }
+        locationJob = null
+        stopJob = serviceScope.launch {
+            val sessionId = inMemorySessionId ?: repository.getActiveSession()?.id
+            if (sessionId != null) repository.stopSession(sessionId)
             stopSelf()
         }
     }
-
-    private fun sampleCount(file: File): Int = file.readLines().drop(1).size
 
     override fun onDestroy() {
         collectionJob?.cancel()
