@@ -14,7 +14,7 @@ interface WardrivingApiService {
     suspend fun login(@Url path: String, @Body request: AuthRequest): AuthResponse
 
     @POST
-    suspend fun register(@Url path: String, @Body request: AuthRequest): AuthResponse
+    suspend fun register(@Url path: String, @Body request: RegisterRequest): AuthResponse
 
     @POST
     suspend fun recoverPassword(

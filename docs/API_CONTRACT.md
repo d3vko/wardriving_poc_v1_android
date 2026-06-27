@@ -42,7 +42,18 @@ Authorization: Bearer <access>
 
 `POST {API_REGISTER_PATH}`
 
-Uses the same request/response shape as login.
+Request:
+
+```json
+{
+  "username": "operator",
+  "email": "operator@example.com",
+  "password": "secret",
+  "password_confirm": "secret"
+}
+```
+
+Response: same shape as login. The app persists only `access`.
 
 ### Password Recovery
 
@@ -97,4 +108,4 @@ LTE uploads use the same shape with:
 }
 ```
 
-Uploads are queued as pending local records and retried with WorkManager. Temporary CSV files are not deleted until upload succeeds or the user confirms cleanup in a future cleanup flow.
+Uploads are queued as pending local Room records and uploaded on demand from the UI (`uploadSession`). Temporary CSV files are not deleted until upload succeeds or the user confirms cleanup in a future cleanup flow.

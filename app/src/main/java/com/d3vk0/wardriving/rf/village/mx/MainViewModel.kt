@@ -77,11 +77,14 @@ class MainViewModel @Inject constructor(
     private var liveMapPinsSessionId: String? = null
     private var sessionDetailMapPinsJob: Job? = null
     private var sessionUploadJob: Job? = null
+    private var settingsJob: Job? = null
+    private var sessionFilterJob: Job? = null
+    private var sessionsJob: Job? = null
 
     init {
-        applyAuthenticatedDefaults()
         viewModelScope.launch {
             authTokenStore.invalidations.collect { invalidation ->
+                stopAuthenticatedObservers()
                 _uiState.update {
                     it.copy(
                         authenticated = false,
@@ -90,17 +93,24 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
-        viewModelScope.launch {
+        if (authRepository.hasToken()) {
+            startAuthenticatedObservers()
+        }
+    }
+
+    private fun startAuthenticatedObservers() {
+        if (sessionsJob?.isActive == true) return
+        settingsJob = viewModelScope.launch {
             settingsStore.settings.collect { settings ->
                 _uiState.update { it.copy(settings = settings) }
             }
         }
-        viewModelScope.launch {
+        sessionFilterJob = viewModelScope.launch {
             settingsStore.sessionFilter.collect { filter ->
                 _uiState.update { it.copy(sessionFilter = filter) }
             }
         }
-        viewModelScope.launch {
+        sessionsJob = viewModelScope.launch {
             wardrivingRepository.observeSessions().collect { sessions ->
                 val storedActive = sessions.firstOrNull { it.status == "RUNNING" || it.status == "PAUSED" }
                 _uiState.update {
@@ -126,20 +136,51 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    private fun stopAuthenticatedObservers() {
+        settingsJob?.cancel()
+        sessionFilterJob?.cancel()
+        sessionsJob?.cancel()
+        countersJob?.cancel()
+        liveMapPinsJob?.cancel()
+        sessionDetailMapPinsJob?.cancel()
+        sessionUploadJob?.cancel()
+        settingsJob = null
+        sessionFilterJob = null
+        sessionsJob = null
+        countersSessionId = null
+        liveMapPinsSessionId = null
+        _uiState.update {
+            it.copy(
+                sessions = emptyList(),
+                activeSessionId = null,
+                isStopping = false,
+                counters = LiveCounters(),
+                liveMapPins = emptyList(),
+                sessionDetailMapPins = emptyList(),
+                sessionUploadState = SessionUploadState("No subido", true),
+                uploadingSessionId = null,
+                settings = SessionSettings(),
+                sessionFilter = SessionFilter.ALL,
+            )
+        }
+    }
+
     fun login(identifier: String, password: String) = viewModelScope.launch {
         try {
             authRepository.login(identifier, password)
             applyAuthenticatedDefaults()
+            startAuthenticatedObservers()
             _uiState.update { it.copy(authenticated = true, status = "Logged in") }
         } catch (error: Throwable) {
             reportError(error, "Login failed")
         }
     }
 
-    fun register(identifier: String, password: String) = viewModelScope.launch {
+    fun register(username: String, email: String, password: String, passwordConfirm: String) = viewModelScope.launch {
         try {
-            authRepository.register(identifier, password)
+            authRepository.register(username, email, password, passwordConfirm)
             applyAuthenticatedDefaults()
+            startAuthenticatedObservers()
             _uiState.update { it.copy(authenticated = true, status = "Registered") }
         } catch (error: Throwable) {
             reportError(error, "Register failed")
@@ -157,6 +198,7 @@ class MainViewModel @Inject constructor(
 
     fun logout() {
         authRepository.logout()
+        stopAuthenticatedObservers()
         _uiState.update { it.copy(authenticated = false, status = "Logged out") }
     }
 

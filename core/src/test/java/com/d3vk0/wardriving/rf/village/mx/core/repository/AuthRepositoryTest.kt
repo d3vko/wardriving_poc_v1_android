@@ -4,6 +4,7 @@ import com.d3vk0.wardriving.rf.village.mx.core.domain.ApiConfig
 import com.d3vk0.wardriving.rf.village.mx.core.remote.AuthRequest
 import com.d3vk0.wardriving.rf.village.mx.core.remote.AuthResponse
 import com.d3vk0.wardriving.rf.village.mx.core.remote.PasswordRecoveryRequest
+import com.d3vk0.wardriving.rf.village.mx.core.remote.RegisterRequest
 import com.d3vk0.wardriving.rf.village.mx.core.remote.RemoteFileDto
 import com.d3vk0.wardriving.rf.village.mx.core.remote.WardrivingApiService
 import com.d3vk0.wardriving.rf.village.mx.core.security.AuthTokenStorage
@@ -49,11 +50,19 @@ class AuthRepositoryTest {
         val tokenStore = FakeTokenStore()
         val repository = AuthRepository(api, config, tokenStore)
 
-        val token = repository.register("operator@example.test", "secret")
+        val token = repository.register("operator", "operator@example.test", "secret", "secret")
 
         assertEquals("registered-access", token)
         assertEquals("registered-access", tokenStore.savedToken)
-        assertEquals(AuthRequest(email = "operator@example.test", password = "secret"), api.registerRequest)
+        assertEquals(
+            RegisterRequest(
+                username = "operator",
+                email = "operator@example.test",
+                password = "secret",
+                password_confirm = "secret",
+            ),
+            api.registerRequest,
+        )
     }
 
     @Test
@@ -95,14 +104,14 @@ class AuthRepositoryTest {
         private val registerResponse: AuthResponse = AuthResponse(access = "register-access"),
     ) : WardrivingApiService {
         var loginRequest: AuthRequest? = null
-        var registerRequest: AuthRequest? = null
+        var registerRequest: RegisterRequest? = null
 
         override suspend fun login(path: String, request: AuthRequest): AuthResponse {
             loginRequest = request
             return loginResponse
         }
 
-        override suspend fun register(path: String, request: AuthRequest): AuthResponse {
+        override suspend fun register(path: String, request: RegisterRequest): AuthResponse {
             registerRequest = request
             return registerResponse
         }

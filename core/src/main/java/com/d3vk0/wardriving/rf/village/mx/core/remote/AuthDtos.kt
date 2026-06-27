@@ -8,6 +8,13 @@ data class AuthRequest(
     val password: String,
 )
 
+data class RegisterRequest(
+    val username: String,
+    val email: String,
+    val password: String,
+    val password_confirm: String,
+)
+
 data class PasswordRecoveryRequest(
     val username: String? = null,
     val email: String? = null,

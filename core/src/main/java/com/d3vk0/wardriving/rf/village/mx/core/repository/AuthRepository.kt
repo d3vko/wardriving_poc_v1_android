@@ -3,6 +3,7 @@ package com.d3vk0.wardriving.rf.village.mx.core.repository
 import com.d3vk0.wardriving.rf.village.mx.core.domain.ApiConfig
 import com.d3vk0.wardriving.rf.village.mx.core.remote.AuthRequest
 import com.d3vk0.wardriving.rf.village.mx.core.remote.PasswordRecoveryRequest
+import com.d3vk0.wardriving.rf.village.mx.core.remote.RegisterRequest
 import com.d3vk0.wardriving.rf.village.mx.core.remote.WardrivingApiService
 import com.d3vk0.wardriving.rf.village.mx.core.security.AuthTokenStorage
 import retrofit2.HttpException
@@ -19,8 +20,16 @@ class AuthRepository(
         return token
     }
 
-    suspend fun register(identifier: String, password: String): String {
-        val response = api.register(config.registerPath, authRequest(identifier, password))
+    suspend fun register(username: String, email: String, password: String, passwordConfirm: String): String {
+        val response = api.register(
+            config.registerPath,
+            RegisterRequest(
+                username = username,
+                email = email,
+                password = password,
+                password_confirm = passwordConfirm,
+            ),
+        )
         val token = requireNotNull(response.access) { "Register response did not contain an access token" }
         tokenStore.saveToken(token)
         return token

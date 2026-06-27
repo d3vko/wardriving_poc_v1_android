@@ -176,7 +176,7 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
             )
         },
         bottomBar = {
-            if (route != "splash" && route != "login" && route != "register" && route != "recovery" && route != "sessionDetail" && route != "advanced") {
+            if (route != "login" && route != "register" && route != "recovery" && route != "sessionDetail" && route != "advanced") {
                 FieldBottomNav(route) { route = it }
             }
         },
@@ -184,24 +184,14 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             StatusLine(uiState)
             when (route) {
-                "splash" -> SplashScreen(
-                    onContinue = {
-                        permissionLauncher.launch(WardrivingPermissions.runtimePermissions())
-                    },
-                    onLogin = { route = "login" },
-                )
                 "login" -> LoginScreen(
-                    title = "Login",
-                    action = "Login",
                     onSubmit = viewModel::login,
-                    onAlt = { route = "register" },
+                    onRegister = { route = "register" },
                     onRecovery = { route = "recovery" },
                 )
-                "register" -> LoginScreen(
-                    title = "Register",
-                    action = "Register",
+                "register" -> RegisterScreen(
                     onSubmit = viewModel::register,
-                    onAlt = { route = "login" },
+                    onLogin = { route = "login" },
                     onRecovery = { route = "recovery" },
                 )
                 "recovery" -> RecoveryScreen(viewModel::recover)
@@ -332,33 +322,69 @@ private fun SessionsScreen(
 }
 
 @Composable
-private fun SplashScreen(onContinue: () -> Unit, onLogin: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        AppLogo()
-        Text(
-            "This app collects nearby Wi-Fi/BLE identifiers, cellular network data, and GPS coordinates for wardriving/research purposes.",
-            style = MaterialTheme.typography.bodyLarge,
+private fun RegisterScreen(
+    onSubmit: (String, String, String, String) -> Unit,
+    onLogin: () -> Unit,
+    onRecovery: () -> Unit,
+) {
+    var username by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordConfirm by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    fun submit() {
+        errorMessage = when {
+            username.isBlank() || email.isBlank() || password.isBlank() || passwordConfirm.isBlank() ->
+                "Completa todos los campos"
+            password != passwordConfirm ->
+                "Las contraseñas no coinciden"
+            else -> null
+        }
+        if (errorMessage == null) {
+            onSubmit(username, email, password, passwordConfirm)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Register", style = MaterialTheme.typography.headlineMedium)
+        OutlinedTextField(username, { username = it }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(email, { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            password,
+            { password = it },
+            label = { Text("Password") },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
         )
-        Text("Location is required because Wi-Fi and BLE scan results are location-derived, GPS geopositions samples, and LTE cell samples need coordinates.")
+        OutlinedTextField(
+            passwordConfirm,
+            { passwordConfirm = it },
+            label = { Text("Confirm password") },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        errorMessage?.let { message ->
+            Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = onContinue) { Text("Grant permissions") }
-            OutlinedButton(onClick = onLogin) { Text("API login") }
+            Button(onClick = ::submit) { Text("Register") }
+            OutlinedButton(onClick = onLogin) { Text("Login") }
+            TextButton(onClick = onRecovery) { Text("Recover") }
         }
     }
 }
 
 @Composable
 private fun LoginScreen(
-    title: String,
-    action: String,
     onSubmit: (String, String) -> Unit,
-    onAlt: () -> Unit,
+    onRegister: () -> Unit,
     onRecovery: () -> Unit,
 ) {
     var identifier by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineMedium)
+        Text("Login", style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(identifier, { identifier = it }, label = { Text("Username or email") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(
             password,
@@ -368,8 +394,8 @@ private fun LoginScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { onSubmit(identifier, password) }) { Text(action) }
-            OutlinedButton(onClick = onAlt) { Text(if (action == "Login") "Register" else "Login") }
+            Button(onClick = { onSubmit(identifier, password) }) { Text("Login") }
+            OutlinedButton(onClick = onRegister) { Text("Register") }
             TextButton(onClick = onRecovery) { Text("Recover") }
         }
     }
