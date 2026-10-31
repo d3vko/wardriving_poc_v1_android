@@ -10,3 +10,6 @@ captures/
 *.aab
 *.keystore
 .env
+
+# APKs y zips de despliegue (se copian al instalar, no van al repo)
+/dist/
