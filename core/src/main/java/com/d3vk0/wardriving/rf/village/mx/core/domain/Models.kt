@@ -1,5 +1,7 @@
 package com.d3vk0.wardriving.rf.village.mx.core.domain
 
+import com.d3vk0.wardriving.rf.village.mx.core.scan.ScanCadence
+
 data class GeoLocation(
     val timestamp: Long,
     val latitude: Double,
@@ -11,7 +13,7 @@ data class GeoLocation(
 )
 
 data class SessionSettings(
-    val sampleIntervalMillis: Long = 20_000L,
+    val sampleIntervalMillis: Long = ScanCadence.WIFI_PERIOD_MS,
     val wifiEnabled: Boolean = true,
     val bleEnabled: Boolean = true,
     val lteEnabled: Boolean = true,

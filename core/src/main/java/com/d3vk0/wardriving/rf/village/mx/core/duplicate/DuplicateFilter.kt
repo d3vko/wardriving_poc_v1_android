@@ -1,10 +1,13 @@
 package com.d3vk0.wardriving.rf.village.mx.core.duplicate
 
+import com.d3vk0.wardriving.rf.village.mx.core.scan.ScanCadence
+
 class DuplicateFilter(
-    private val windowMillis: Long = 20_000L,
+    private val windowMillis: Long = ScanCadence.DEDUPE_WINDOW_MS,
 ) {
     private val lastSeen = linkedMapOf<String, Long>()
 
+    @Synchronized
     fun shouldKeep(key: String, timestamp: Long): Boolean {
         val previous = lastSeen[key]
         if (previous != null && timestamp - previous < windowMillis) return false

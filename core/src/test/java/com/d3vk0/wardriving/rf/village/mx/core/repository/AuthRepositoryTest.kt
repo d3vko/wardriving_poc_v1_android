@@ -18,6 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.fail
 import org.junit.Test
+import java.util.Base64
 import retrofit2.Response
 
 class AuthRepositoryTest {
@@ -41,7 +42,21 @@ class AuthRepositoryTest {
 
         assertEquals("access-jwt", token)
         assertEquals("access-jwt", tokenStore.savedToken)
+        assertEquals("operator", tokenStore.savedUsername)
         assertEquals(AuthRequest(username = "operator", password = "secret"), api.loginRequest)
+    }
+
+    @Test
+    fun importJwtPersistsTokenAndUsernameClaim() {
+        val payload = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString("""{"username":"d3vnullv01d"}""".toByteArray())
+        val token = "eyJhbGciOiJub25lIn0.$payload.sig"
+        val tokenStore = FakeTokenStore()
+        val repository = AuthRepository(FakeAuthApi(), config, tokenStore)
+
+        assertEquals(token, repository.importJwt("  $token  "))
+        assertEquals(token, tokenStore.savedToken)
+        assertEquals("d3vnullv01d", tokenStore.savedUsername)
     }
 
     @Test
@@ -82,6 +97,7 @@ class AuthRepositoryTest {
 
     private class FakeTokenStore : AuthTokenStorage {
         var savedToken: String? = null
+        var savedUsername: String? = null
         override val invalidations: SharedFlow<AuthInvalidation> = MutableSharedFlow()
 
         override fun getToken(): String? = savedToken
@@ -90,8 +106,15 @@ class AuthRepositoryTest {
             savedToken = token
         }
 
+        override fun getUsername(): String? = savedUsername
+
+        override fun saveUsername(username: String?) {
+            savedUsername = username
+        }
+
         override fun clear() {
             savedToken = null
+            savedUsername = null
         }
 
         override fun invalidate(httpCode: Int) {

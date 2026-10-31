@@ -13,6 +13,8 @@ interface AuthTokenStorage {
     val invalidations: SharedFlow<AuthInvalidation>
     fun getToken(): String?
     fun saveToken(token: String)
+    fun getUsername(): String?
+    fun saveUsername(username: String?)
     fun clear()
     fun invalidate(httpCode: Int)
 }
@@ -35,6 +37,12 @@ class AuthTokenStore(context: Context) : AuthTokenStorage {
         preferences.edit().putString(KEY_TOKEN, token).apply()
     }
 
+    override fun getUsername(): String? = preferences.getString(KEY_USERNAME, null)
+
+    override fun saveUsername(username: String?) {
+        preferences.edit().putString(KEY_USERNAME, username).apply()
+    }
+
     override fun clear() {
         preferences.edit().clear().apply()
     }
@@ -46,5 +54,6 @@ class AuthTokenStore(context: Context) : AuthTokenStorage {
 
     private companion object {
         const val KEY_TOKEN = "jwt"
+        const val KEY_USERNAME = "username"
     }
 }

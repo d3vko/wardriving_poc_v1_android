@@ -8,32 +8,30 @@ import java.util.TimeZone
 
 class WigleCsvFormatter {
     companion object {
-        /*
-         * Wigle has adjusted accepted CSV variants over time. Keep the header isolated here
-         * so a future Wigle format change is a one-line update plus formatter tests.
-         */
         const val HEADER =
             "MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters,Type"
     }
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
+        timeZone = TimeZone.getDefault()
     }
 
-    fun format(samples: List<WifiBleSampleEntity>, sessionStartedAt: Long = Long.MIN_VALUE): String {
+    fun format(samples: List<WifiBleSampleEntity>, sessionStartedAt: Long = 0L): String {
         return buildString {
             appendLine(HEADER)
             samples.forEach { sample ->
+                val ts = if (sample.timestamp > sessionStartedAt) sample.timestamp else sessionStartedAt
+                val (lat, lon) = CsvExportCoords.forWifiBle(sample)
                 appendLine(
                     listOf(
                         sample.mac,
                         sample.ssid,
                         sample.authMode,
-                        dateFormat.format(Date(maxOf(sample.timestamp, sessionStartedAt))),
+                        dateFormat.format(Date(ts)),
                         sample.channel,
                         sample.rssi,
-                        CsvDecimalFormatter.latitude(sample.latitude),
-                        CsvDecimalFormatter.longitude(sample.longitude),
+                        lat,
+                        lon,
                         CsvDecimalFormatter.measurement(sample.altitudeMeters),
                         CsvDecimalFormatter.measurement(sample.accuracyMeters),
                         sample.type,

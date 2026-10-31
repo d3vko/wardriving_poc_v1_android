@@ -21,15 +21,27 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "API_BASE_URL", configString("API_BASE_URL", "https://api.example.invalid/"))
+        buildConfigField("String", "API_BASE_URL", configString("API_BASE_URL", "https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/"))
         buildConfigField("String", "API_LOGIN_PATH", configString("API_LOGIN_PATH", "auth/login"))
         buildConfigField("String", "API_REGISTER_PATH", configString("API_REGISTER_PATH", "auth/register"))
         buildConfigField("String", "API_PASSWORD_RECOVERY_PATH", configString("API_PASSWORD_RECOVERY_PATH", "auth/password-recovery"))
         buildConfigField("String", "API_UPLOAD_PATH", configString("API_UPLOAD_PATH", "files-uploaded/"))
         buildConfigField("String", "API_UPLOAD_TYPE_WIFI_BLE", configString("API_UPLOAD_TYPE_WIFI_BLE", "wifi_ble"))
         buildConfigField("String", "API_UPLOAD_TYPE_LTE", configString("API_UPLOAD_TYPE_LTE", "lte"))
-        buildConfigField("String", "APP_ACCENT_COLOR", configString("APP_ACCENT_COLOR", "#00A676"))
+        buildConfigField("String", "APP_ACCENT_COLOR", configString("APP_ACCENT_COLOR", "#4EE08A"))
+        buildConfigField(
+            "String",
+            "SENTRY_DSN",
+            configString(
+                "SENTRY_DSN",
+                "https://471792e4ce19406c86e1297a69e83cb7@error-handlers.rf-village-mx.com/4",
+            ),
+        )
         buildConfigField("String", "MAPLIBRE_STYLE_URL", configString("MAPLIBRE_STYLE_URL", "https://demotiles.maplibre.org/style.json"))
+        manifestPlaceholders["sentryDsn"] = configValue(
+            "SENTRY_DSN",
+            "https://471792e4ce19406c86e1297a69e83cb7@error-handlers.rf-village-mx.com/4",
+        )
     }
 
     buildTypes {
@@ -133,6 +145,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.play.services.location)
     implementation(libs.maplibre.android.sdk)
+    implementation(libs.sentry.android)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)

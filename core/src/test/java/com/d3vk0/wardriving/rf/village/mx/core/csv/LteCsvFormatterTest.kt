@@ -2,52 +2,26 @@ package com.d3vk0.wardriving.rf.village.mx.core.csv
 
 import com.d3vk0.wardriving.rf.village.mx.core.local.LteSampleEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class LteCsvFormatterTest {
     @Test
-    fun formatsEnglishHeaderInRequestedOrder() {
-        val csv = LteCsvFormatter().format(
-            listOf(
-                LteSampleEntity(
-                    sessionId = "s1",
-                    timestamp = 1_768_941_212_000L,
-                    technology = "LTE",
-                    state = "1",
-                    mcc = "334",
-                    mnc = "20",
-                    lac = 245,
-                    cellId = 2705,
-                    pci = 123,
-                    earfcn = 2750,
-                    band = "7",
-                    rssi = -68,
-                    rsrp = -99,
-                    rsrq = -12,
-                    sinr = 10,
-                    operator = "Telcel",
-                    longitude = -99.0412598,
-                    latitude = 19.5308285,
-                    rawPayload = null,
-                ),
-            ),
-        )
+    fun formatsHeaderAndSyntheticCoords() {
+        val csv = LteCsvFormatter().format(listOf(sample()))
 
         assertTrue(csv.startsWith(LteCsvFormatter.HEADER))
-        assertTrue(csv.contains("LTE,LTE,1,334,20,245,2705,10,145,123,7,2750,2620.0,2500.0,-68,-99,-12,10,Telcel,-99.0412598,19.5308285"))
+        assertTrue(csv.contains("LTE,LTE,1,334,20,245,2705,10,145,123,7,2750,2620.0,2500.0,-68,-99,-12,10,Telcel,-9.8765432,1.2345678"))
     }
 
     @Test
     fun derivesBandAndFrequenciesFromKnownEarfcnWhenBandIsNull() {
-        val fields = formatRow(
-            sample(
-                cellId = 2705,
-                pci = 123,
-                earfcn = 2750,
-                band = null,
-            ),
-        )
+        val fields = formatRow(sample(earfcn = 2750, band = null))
 
         assertEquals("10", fields[8])
         assertEquals("145", fields[9])
@@ -60,13 +34,7 @@ class LteCsvFormatterTest {
 
     @Test
     fun writesEmptyBandAndFrequenciesForUnmappedEarfcn() {
-        val fields = formatRow(
-            sample(
-                pci = 123,
-                earfcn = 99_999,
-                band = null,
-            ),
-        )
+        val fields = formatRow(sample(earfcn = 99_999, band = null))
 
         assertEquals("123", fields[10])
         assertEquals("", fields[11])
@@ -85,13 +53,50 @@ class LteCsvFormatterTest {
     }
 
     @Test
-    fun writesUnavailableValuesAsEmptyFields() {
+    fun writesZeroCoordsWhenGpsMissing() {
+        val csv = LteCsvFormatter().format(listOf(sample(latitude = null, longitude = null)))
+        assertTrue(csv.contains("0.0000000,0.0000000"))
+    }
+
+    @Test
+    fun writesZeroCoordsWhenMccMncAreZero() {
+        val csv = LteCsvFormatter().format(listOf(sample(mcc = "0", mnc = "0")))
+        assertTrue(csv.contains("0.0000000,0.0000000"))
+    }
+
+    @Test
+    fun writesZeroCoordsForCellIdSentinel() {
+        val csv = LteCsvFormatter().format(
+            listOf(sample(cellId = CsvExportCoords.CELL_ID_UNAVAILABLE_SENTINEL)),
+        )
+        assertTrue(csv.contains("0.0000000,0.0000000"))
+    }
+
+    @Test
+    fun writesZeroCoordsForLacSentinel() {
+        val csv = LteCsvFormatter().format(
+            listOf(sample(lac = CsvExportCoords.LAC_UNAVAILABLE_SENTINEL)),
+        )
+        assertTrue(csv.contains("0.0000000,0.0000000"))
+    }
+
+    @Test
+    fun clampsTimestampBelowSessionStartedAt() {
+        val sessionStart = 1_710_000_000_000L
+        val csv = LteCsvFormatter().format(
+            listOf(sample(timestamp = 150_000_000L)),
+            sessionStartedAt = sessionStart,
+        )
+        assertTrue(csv.contains(formatLocal(sessionStart)))
+        assertFalse(csv.contains("1970-"))
+    }
+
+    @Test
+    fun writesUnavailableIdentityAsEmptyFieldsAndZeroCoords() {
         val csv = LteCsvFormatter().format(
             listOf(
-                LteSampleEntity(
-                    sessionId = "s1",
+                sample(
                     timestamp = 0L,
-                    technology = "LTE",
                     state = "0",
                     mcc = null,
                     mnc = null,
@@ -107,12 +112,11 @@ class LteCsvFormatterTest {
                     operator = null,
                     longitude = null,
                     latitude = null,
-                    rawPayload = null,
                 ),
             ),
         ).lines()[1]
 
-        assertEquals("1970-01-01 00:00:00,LTE,LTE,0,,,,,,,,,,,,,,,,,,", csv)
+        assertEquals("${formatLocal(0L)},LTE,LTE,0,,,,,,,,,,,,,,,,,0.0000000,0.0000000", csv)
     }
 
     @Test
@@ -135,38 +139,7 @@ class LteCsvFormatterTest {
             ),
         )
 
-        assertTrue(!csv.contains("UNAVAILABLE"))
-    }
-
-    @Test
-    fun writesInvalidCoordinatesAsEmptyFields() {
-        val csv = LteCsvFormatter().format(
-            listOf(
-                LteSampleEntity(
-                    sessionId = "s1",
-                    timestamp = 0L,
-                    technology = "LTE",
-                    state = "1",
-                    mcc = "334",
-                    mnc = "20",
-                    lac = 245,
-                    cellId = 2705,
-                    pci = 123,
-                    earfcn = 2750,
-                    band = "7",
-                    rssi = -68,
-                    rsrp = -99,
-                    rsrq = -12,
-                    sinr = 10,
-                    operator = "Telcel",
-                    longitude = Double.NEGATIVE_INFINITY,
-                    latitude = 99.99999996,
-                    rawPayload = null,
-                ),
-            ),
-        ).lines()[1]
-
-        assertTrue(csv.endsWith("Telcel,,"))
+        assertFalse(csv.contains("UNAVAILABLE"))
     }
 
     private fun formatRow(sample: LteSampleEntity): List<String> {
@@ -174,7 +147,7 @@ class LteCsvFormatterTest {
     }
 
     private fun sample(
-        timestamp: Long = 0L,
+        timestamp: Long = 1_710_000_000_000L,
         technology: String = "LTE",
         state: String = "1",
         mcc: String? = "334",
@@ -189,8 +162,8 @@ class LteCsvFormatterTest {
         rsrq: Int? = -12,
         sinr: Int? = 10,
         operator: String? = "Telcel",
-        longitude: Double? = -99.0412598,
-        latitude: Double? = 19.5308285,
+        longitude: Double? = -9.8765432,
+        latitude: Double? = 1.2345678,
     ) = LteSampleEntity(
         sessionId = "s1",
         timestamp = timestamp,
@@ -212,4 +185,10 @@ class LteCsvFormatterTest {
         latitude = latitude,
         rawPayload = null,
     )
+
+    private fun formatLocal(epochMs: Long): String {
+        val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+        format.timeZone = TimeZone.getDefault()
+        return format.format(Date(epochMs))
+    }
 }

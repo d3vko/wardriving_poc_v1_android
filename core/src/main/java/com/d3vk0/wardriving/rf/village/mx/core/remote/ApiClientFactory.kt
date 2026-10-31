@@ -1,6 +1,7 @@
 package com.d3vk0.wardriving.rf.village.mx.core.remote
 
 import com.d3vk0.wardriving.rf.village.mx.core.domain.ApiConfig
+import com.d3vk0.wardriving.rf.village.mx.core.security.TlsPins
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -15,6 +16,7 @@ class ApiClientFactory(
             level = HttpLoggingInterceptor.Level.BASIC
         }
         val client = OkHttpClient.Builder()
+            .certificatePinner(TlsPins.certificatePinner())
             .addInterceptor { chain ->
                 val requestBuilder = chain.request().newBuilder()
                 tokenProvider()?.takeIf { it.isNotBlank() }?.let { token ->

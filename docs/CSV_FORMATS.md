@@ -1,11 +1,28 @@
-# CSV Formats
+# Formatos CSV
 
-## Wi-Fi/BLE CSV
+Contrato de export alineado a la v2 Flutter (estándar de salida).
 
-File name:
+## Timestamps
+
+- `FirstSeen` (Wi‑Fi/BLE) y `Timestamp` (LTE) usan la **hora local del dispositivo** (`yyyy-MM-dd HH:mm:ss`).
+- Si el timestamp de la muestra es anterior al inicio de la sesión (p. ej. residual de ms-desde-boot en LTE), se sustituye por `session.startedAt`.
+- En captura LTE el timestamp es siempre wall clock del sistema (`System.currentTimeMillis()`), no `CellInfo.timestampMillis`.
+
+## Coordenadas y lecturas no factibles
+
+Si falta GPS válido **o** la lectura RF no es factible, se escriben coordenadas `0.0000000` (lat y lon) para que la plataforma no las procese. Las filas se conservan en el CSV.
+
+| Tecnología | No factible si |
+|------------|----------------|
+| Wi‑Fi / BLE | MAC vacío, o lat/lon null/NaN/Inf |
+| LTE | MCC vacío/`0`, o MNC vacío/`0`, o CellID null/sentinel (`268435455`), o LAC null/sentinel (`65535`), o GPS inválido |
+
+## Wi‑Fi / BLE (estilo Wigle)
+
+Nombre de archivo:
 
 ```text
-wifi_ble_<session_id>_<timestamp>.csv
+wifi_ble_<session_id>_<epoch_ms>.csv
 ```
 
 Header:
@@ -14,32 +31,36 @@ Header:
 MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters,Type
 ```
 
-Wi-Fi mapping:
+### Mapeo Wi‑Fi
 
-- `BSSID` -> `MAC`
-- `SSID` -> `SSID`
-- `capabilities` -> `AuthMode`
-- `frequency` -> channel
-- `level` -> `RSSI`
-- latest GPS fix -> coordinates
-- `Type` -> `WIFI`
+| Origen | Columna |
+|--------|---------|
+| BSSID | MAC |
+| SSID | SSID |
+| capabilities | AuthMode |
+| frequency → canal | Channel |
+| level | RSSI |
+| último fix GPS (o `0.0000000` si inválido) | CurrentLatitude / CurrentLongitude / AltitudeMeters / AccuracyMeters |
+| constante | Type = `WIFI` |
 
-BLE mapping:
+### Mapeo BLE
 
-- Bluetooth address when available -> `MAC`
-- device name or empty string -> `SSID`
-- `BLE` -> `AuthMode`
-- empty channel unless a future mapper derives one
-- `ScanResult.rssi` -> `RSSI`
-- latest GPS fix -> coordinates
-- `Type` -> `BLE`
+| Origen | Columna |
+|--------|---------|
+| dirección Bluetooth | MAC |
+| nombre o `""` | SSID |
+| constante `BLE` | AuthMode |
+| vacío (salvo mapper futuro) | Channel |
+| ScanResult.rssi | RSSI |
+| último fix GPS (o `0.0000000` si inválido) | coordenadas |
+| constante | Type = `BLE` |
 
-## LTE CSV
+## LTE
 
-File name:
+Nombre de archivo:
 
 ```text
-lte_<session_id>_<timestamp>.csv
+lte_<session_id>_<epoch_ms>.csv
 ```
 
 Header:
@@ -48,23 +69,33 @@ Header:
 Timestamp,Tecnología,TipoCelda,Estado,MCC,MNC,LAC,CellID,eNodeB,Sector,PCI,Banda,EARFCN,FreqDL_MHz,FreqUL_MHz,RSSI,RSRP,RSRQ,SINR,Operador,Longitud,Latitud
 ```
 
-Android API mapping:
+### Mapeo Telephony Android
 
-- `CellInfoLte` -> `Tecnología` and `TipoCelda` as `LTE`
-- `CellInfo.cellConnectionStatus` -> `Estado`
-- `CellIdentityLte.mccString` -> `MCC`
-- `CellIdentityLte.mncString` -> `MNC`
-- `CellIdentityLte.tac` -> `LAC`
-- `CellIdentityLte.ci` -> `CellID`
-- `CellIdentityLte.ci / 256` -> `eNodeB`
-- `CellIdentityLte.ci % 256` -> `Sector`
-- `CellIdentityLte.pci` -> `PCI`
-- `CellIdentityLte.earfcn` -> `EARFCN`, derived `Banda`, `FreqDL_MHz`, and `FreqUL_MHz` when mapped
-- `CellSignalStrengthLte.dbm` -> `RSSI`
-- `CellSignalStrengthLte.rsrp` -> `RSRP`
-- `CellSignalStrengthLte.rsrq` -> `RSRQ`
-- `CellSignalStrengthLte.rssnr` -> `SINR`
-- `TelephonyManager.networkOperatorName` -> `Operador`
-- latest GPS fix -> `Longitud`, `Latitud`
+| Origen | Columna |
+|--------|---------|
+| CellInfoLte | Tecnología / TipoCelda = `LTE` |
+| cellConnectionStatus | Estado |
+| mccString / mncString | MCC / MNC |
+| tac | LAC |
+| ci | CellID |
+| ci / 256 | eNodeB |
+| ci % 256 | Sector |
+| pci | PCI |
+| earfcn + band mapper | EARFCN, Banda, FreqDL_MHz, FreqUL_MHz |
+| dbm / rsrp / rsrq / rssnr | RSSI / RSRP / RSRQ / SINR |
+| networkOperatorName | Operador |
+| último fix GPS (o `0.0000000` si inválido) | Longitud / Latitud |
 
-Unavailable Android values such as `CellInfo.UNAVAILABLE` are exported as empty strings.
+Valores no disponibles → cadena vacía en el CSV:
+
+- `CellInfo.UNAVAILABLE` / `Int.MAX_VALUE` / `Int.MIN_VALUE`
+- TAC sentinel `65535` (16-bit all ones)
+- CI sentinel `268435455` (28-bit all ones)
+
+## ZIP
+
+```text
+session_<session_id>_<epoch_ms>.zip
+```
+
+Empaquetar uno o ambos CSV de una sesión (omitir el que no tenga muestras). Compartir vía FileProvider; guardar con Storage Access Framework.

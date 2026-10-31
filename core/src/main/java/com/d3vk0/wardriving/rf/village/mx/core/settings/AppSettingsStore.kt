@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionFilter
 import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionSettings
 import com.d3vk0.wardriving.rf.village.mx.core.domain.toStorageValue
+import com.d3vk0.wardriving.rf.village.mx.core.scan.ScanCadence
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -33,7 +34,7 @@ class AppSettingsStore(private val context: Context) {
 
     val settings: Flow<SessionSettings> = context.appSettingsDataStore.data.map { prefs ->
         SessionSettings(
-            sampleIntervalMillis = prefs[Keys.interval] ?: 20_000L,
+            sampleIntervalMillis = ScanCadence.effectiveWifiPeriod(prefs[Keys.interval]),
             wifiEnabled = prefs[Keys.wifi] ?: true,
             bleEnabled = prefs[Keys.ble] ?: true,
             lteEnabled = prefs[Keys.lte] ?: true,
@@ -46,7 +47,7 @@ class AppSettingsStore(private val context: Context) {
     suspend fun update(transform: (SessionSettings) -> SessionSettings) {
         context.appSettingsDataStore.edit { prefs ->
             val current = SessionSettings(
-                sampleIntervalMillis = prefs[Keys.interval] ?: 20_000L,
+                sampleIntervalMillis = ScanCadence.effectiveWifiPeriod(prefs[Keys.interval]),
                 wifiEnabled = prefs[Keys.wifi] ?: true,
                 bleEnabled = prefs[Keys.ble] ?: true,
                 lteEnabled = prefs[Keys.lte] ?: true,

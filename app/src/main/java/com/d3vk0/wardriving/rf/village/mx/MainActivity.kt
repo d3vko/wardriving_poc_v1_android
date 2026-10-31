@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -30,7 +33,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -59,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -74,6 +77,7 @@ import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionSettings
 import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionFilter
 import com.d3vk0.wardriving.rf.village.mx.core.domain.filterSessions
 import com.d3vk0.wardriving.rf.village.mx.core.local.WardrivingSessionEntity
+import com.d3vk0.wardriving.rf.village.mx.ui.theme.Brand
 import com.d3vk0.wardriving.rf.village.mx.ui.theme.WardrivingTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
@@ -116,7 +120,7 @@ class MainActivity : ComponentActivity() {
 private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    var route by remember { mutableStateOf(if (uiState.authenticated) AUTHENTICATED_START_ROUTE else "login") }
+    var route by remember { mutableStateOf(FIELD_START_ROUTE) }
     var selectedSession by remember { mutableStateOf<WardrivingSessionEntity?>(null) }
     var permissionRequestAttempted by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -144,17 +148,9 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
     LaunchedEffect(uiState.authenticated) {
         if (uiState.authenticated) {
             viewModel.applyAuthenticatedDefaults()
-            if (WardrivingPermissions.hasRequiredRuntimePermissions(context)) {
-                route = AUTHENTICATED_START_ROUTE
-            } else if (!permissionRequestAttempted) {
-                permissionRequestAttempted = true
-                permissionLauncher.launch(WardrivingPermissions.missingRuntimePermissions(context))
-            } else {
-                route = "settings"
+            if (route == "login" || route == "register" || route == "recovery") {
+                route = FIELD_START_ROUTE
             }
-        } else {
-            permissionRequestAttempted = false
-            route = "login"
         }
     }
 
@@ -172,7 +168,16 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("RF Village MX Wardriving") },
+                title = {
+                    Column {
+                        Text(Brand.activity)
+                        Text(
+                            Brand.launcherName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Brand.crema.copy(alpha = 0.7f),
+                        )
+                    }
+                },
             )
         },
         bottomBar = {
@@ -188,13 +193,18 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
                     onSubmit = viewModel::login,
                     onRegister = { route = "register" },
                     onRecovery = { route = "recovery" },
+                    onSkip = { route = FIELD_START_ROUTE },
                 )
                 "register" -> RegisterScreen(
                     onSubmit = viewModel::register,
                     onLogin = { route = "login" },
                     onRecovery = { route = "recovery" },
+                    onSkip = { route = FIELD_START_ROUTE },
                 )
-                "recovery" -> RecoveryScreen(viewModel::recover)
+                "recovery" -> RecoveryScreen(
+                    onRecover = viewModel::recover,
+                    onSkip = { route = FIELD_START_ROUTE },
+                )
                 "dashboard" -> DashboardScreen(
                     uiState = uiState,
                     onAdvanced = { route = "advanced" },
@@ -205,11 +215,14 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
                     viewModel::pauseSession,
                     viewModel::resumeSession,
                     viewModel::stopSession,
+                    onOpenLogin = { route = "login" },
                 )
                 "sessions" -> SessionsScreen(
                     sessions = uiState.sessions,
                     selectedFilter = uiState.sessionFilter,
                     onFilterChange = viewModel::setSessionFilter,
+                    onUploadAll = viewModel::uploadAllUnprocessed,
+                    uploadBusy = uiState.uploadingSessionId != null,
                 ) {
                     selectedSession = it
                     viewModel.observeSessionDetailMapPins(it.id)
@@ -232,9 +245,10 @@ private fun WardrivingApp(uiState: MainUiState, viewModel: MainViewModel) {
                     },
                 )
                 "settings" -> SettingsScreen(
-                    settings = uiState.settings,
+                    uiState = uiState,
                     hasRequiredPermissions = WardrivingPermissions.hasRequiredRuntimePermissions(context),
                     onGrantPermissions = { requestMissingPermissions() },
+                    onOpenLogin = { route = "login" },
                     viewModel = viewModel,
                 )
                 "advanced" -> AdvancedAtModemScreen()
@@ -263,11 +277,12 @@ private fun FieldBottomNav(currentRoute: String, onRoute: (String) -> Unit) {
                 label = { Text(label) },
                 icon = {
                     if (iconRes != null) {
-                        Icon(
+                        Image(
                             painter = painterResource(iconRes),
                             contentDescription = label,
-                            modifier = Modifier.size(24.dp),
-                            tint = Color.Unspecified,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .alpha(if (currentRoute == route) 1f else 0.62f),
                         )
                     } else {
                         Text(label.take(1))
@@ -283,6 +298,8 @@ private fun SessionsScreen(
     sessions: List<WardrivingSessionEntity>,
     selectedFilter: SessionFilter,
     onFilterChange: (SessionFilter) -> Unit,
+    onUploadAll: () -> Unit,
+    uploadBusy: Boolean,
     onSessionDetail: (WardrivingSessionEntity) -> Unit,
 ) {
     val visibleSessions = filterSessions(sessions, selectedFilter)
@@ -291,8 +308,18 @@ private fun SessionsScreen(
         SessionFilter.PROCESSED -> "No hay sesiones en plataforma."
         SessionFilter.ALL -> "No saved sessions yet."
     }
+    val canUploadAll = sessions.any { !it.uploaded && it.status == "STOPPED" }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Sessions", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item {
+            Button(
+                onClick = onUploadAll,
+                enabled = canUploadAll && !uploadBusy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (uploadBusy) "Subiendo…" else "Upload all")
+            }
+        }
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -326,6 +353,7 @@ private fun RegisterScreen(
     onSubmit: (String, String, String, String) -> Unit,
     onLogin: () -> Unit,
     onRecovery: () -> Unit,
+    onSkip: () -> Unit,
 ) {
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -372,6 +400,7 @@ private fun RegisterScreen(
             OutlinedButton(onClick = onLogin) { Text("Login") }
             TextButton(onClick = onRecovery) { Text("Recover") }
         }
+        TextButton(onClick = onSkip) { Text("Continuar sin cuenta") }
     }
 }
 
@@ -380,11 +409,16 @@ private fun LoginScreen(
     onSubmit: (String, String) -> Unit,
     onRegister: () -> Unit,
     onRecovery: () -> Unit,
+    onSkip: () -> Unit,
 ) {
     var identifier by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Login", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            "Opcional: puedes escanear sin cuenta. El JWT sirve para subir a la pecera.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
         OutlinedTextField(identifier, { identifier = it }, label = { Text("Username or email") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(
             password,
@@ -398,16 +432,18 @@ private fun LoginScreen(
             OutlinedButton(onClick = onRegister) { Text("Register") }
             TextButton(onClick = onRecovery) { Text("Recover") }
         }
+        TextButton(onClick = onSkip) { Text("Continuar sin cuenta") }
     }
 }
 
 @Composable
-private fun RecoveryScreen(onRecover: (String) -> Unit) {
+private fun RecoveryScreen(onRecover: (String) -> Unit, onSkip: () -> Unit) {
     var identifier by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Password recovery", style = MaterialTheme.typography.headlineMedium)
         OutlinedTextField(identifier, { identifier = it }, label = { Text("Username or email") }, modifier = Modifier.fillMaxWidth())
         Button(onClick = { onRecover(identifier) }) { Text("Send recovery request") }
+        TextButton(onClick = onSkip) { Text("Continuar sin cuenta") }
     }
 }
 
@@ -443,18 +479,67 @@ private fun LiveScanScreen(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    onOpenLogin: () -> Unit,
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            EventBanner(
+                username = uiState.username,
+                authenticated = uiState.authenticated,
+                onOpenLogin = onOpenLogin,
+            )
             MapPanel(
                 title = "Live wardriving map",
                 pins = uiState.liveMapPins,
                 gpsStatus = uiState.counters.gpsStatus,
                 modifier = Modifier.fillMaxWidth().aspectRatio(1.15f),
             )
+            CounterGrid(uiState)
         }
-        item { FieldModeControls(onStart, onPause, onResume, onStop, uiState) }
-        item { CounterGrid(uiState) }
+        Spacer(Modifier.height(12.dp))
+        FieldModeControls(onStart, onPause, onResume, onStop, uiState)
+    }
+}
+
+@Composable
+private fun EventBanner(
+    username: String?,
+    authenticated: Boolean,
+    onOpenLogin: () -> Unit,
+) {
+    val welcome = if (!username.isNullOrBlank()) {
+        "Bienvenido, $username"
+    } else {
+        "Entra para subir a la pecera"
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Brand.tarjeta),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.mascot),
+                contentDescription = Brand.activity,
+                modifier = Modifier.size(64.dp),
+                contentScale = ContentScale.Fit,
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(Brand.activity, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("${Brand.villageLine} · ${Brand.eventLine}", style = MaterialTheme.typography.bodySmall)
+                Text(welcome, style = MaterialTheme.typography.bodyMedium, color = Brand.lima)
+                if (!authenticated) {
+                    TextButton(onClick = onOpenLogin) { Text("Entrar") }
+                }
+            }
+        }
     }
 }
 
@@ -552,13 +637,22 @@ private fun SessionDetailScreen(
 
 @Composable
 private fun SettingsScreen(
-    settings: SessionSettings,
+    uiState: MainUiState,
     hasRequiredPermissions: Boolean,
     onGrantPermissions: () -> Unit,
+    onOpenLogin: () -> Unit,
     viewModel: MainViewModel,
 ) {
+    val settings = uiState.settings
+    var jwt by remember { mutableStateOf("") }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { Text("Settings", style = MaterialTheme.typography.headlineSmall) }
+        item {
+            Text(
+                if (!uiState.username.isNullOrBlank()) "Bienvenido, ${uiState.username}" else "Sin cuenta: el escaneo local sigue activo.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
         if (!hasRequiredPermissions) {
             item {
                 Card(Modifier.fillMaxWidth()) {
@@ -578,13 +672,39 @@ private fun SettingsScreen(
         item { ToggleRow("Enable local CSV export", settings.localCsvExport) { viewModel.updateSettings { s -> s.copy(localCsvExport = it) } } }
         item { ToggleRow("Keep screen awake", settings.keepScreenAwake) { viewModel.updateSettings { s -> s.copy(keepScreenAwake = it) } } }
         item {
+            Text("Cadencia Wi-Fi ~2 s, BLE continuo, GPS 1 s (tipo Wigle).", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            OutlinedTextField(
+                jwt,
+                { jwt = it },
+                label = { Text("Importar JWT") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            Button(
+                onClick = { viewModel.importJwt(jwt) },
+                enabled = jwt.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Guardar JWT") }
+        }
+        item {
             OutlinedButton(onClick = { viewModel.updateSettings { SessionSettings() } }) {
                 Text("Reset settings")
             }
         }
-        item {
-            OutlinedButton(onClick = viewModel::logout) {
-                Text("Logout API token")
+        if (!uiState.authenticated) {
+            item {
+                Button(onClick = onOpenLogin, modifier = Modifier.fillMaxWidth()) {
+                    Text("Iniciar sesión")
+                }
+            }
+        } else {
+            item {
+                OutlinedButton(onClick = viewModel::logout) {
+                    Text("Logout API token")
+                }
             }
         }
         item {

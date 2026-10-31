@@ -12,10 +12,50 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 class BleScanner(private val bluetoothAdapter: BluetoothAdapter?) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile
+    private var continuousCallback: ScanCallback? = null
+
+    fun start(onResult: (ScanResult) -> Unit) {
+        stop()
+        val adapter = bluetoothAdapter ?: return
+        val scanner = adapter.bluetoothLeScanner ?: return
+        if (!adapter.isEnabled) return
+        val callback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                onResult(result)
+            }
+
+            override fun onBatchScanResults(batchResults: MutableList<ScanResult>) {
+                batchResults.forEach(onResult)
+            }
+        }
+        continuousCallback = callback
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+        runCatching { scanner.startScan(null, settings, callback) }
+            .onFailure { continuousCallback = null }
+    }
+
+    fun stop() {
+        val callback = continuousCallback ?: return
+        continuousCallback = null
+        val scanner = bluetoothAdapter?.bluetoothLeScanner
+        runCatching { scanner?.stopScan(callback) }
+    }
+
+    fun toEntity(
+        result: ScanResult,
+        sessionId: String,
+        location: GeoLocation?,
+        timestamp: Long = System.currentTimeMillis(),
+    ): WifiBleSampleEntity = result.toEntity(sessionId, timestamp, location)
+
     suspend fun scan(
         sessionId: String,
         location: GeoLocation?,
-        scanWindowMillis: Long = 5_000L,
+        scanWindowMillis: Long = 1_500L,
     ): List<WifiBleSampleEntity> = suspendCancellableCoroutine { continuation ->
         val adapter = bluetoothAdapter
         val scanner = adapter?.bluetoothLeScanner
@@ -44,13 +84,12 @@ class BleScanner(private val bluetoothAdapter: BluetoothAdapter?) {
             }
         }
 
-        val handler = Handler(Looper.getMainLooper())
         val stop = Runnable {
             runCatching { scanner.stopScan(callback) }
             if (continuation.isActive) continuation.resume(results.values.toList())
         }
         continuation.invokeOnCancellation {
-            handler.removeCallbacks(stop)
+            mainHandler.removeCallbacks(stop)
             runCatching { scanner.stopScan(callback) }
         }
 
@@ -61,7 +100,7 @@ class BleScanner(private val bluetoothAdapter: BluetoothAdapter?) {
             .onFailure {
                 if (continuation.isActive) continuation.resume(emptyList())
             }
-        handler.postDelayed(stop, scanWindowMillis)
+        mainHandler.postDelayed(stop, scanWindowMillis)
     }
 
     private fun ScanResult.toEntity(

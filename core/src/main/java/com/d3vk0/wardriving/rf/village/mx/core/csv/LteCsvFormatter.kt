@@ -14,18 +14,20 @@ class LteCsvFormatter(private val bandMapper: LteBandMapper = LteBandMapper()) {
     }
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
+        timeZone = TimeZone.getDefault()
     }
 
-    fun format(samples: List<LteSampleEntity>): String {
+    fun format(samples: List<LteSampleEntity>, sessionStartedAt: Long = 0L): String {
         return buildString {
             appendLine(HEADER)
             samples.forEach { sample ->
                 val cellId = sample.cellId
                 val earfcn = sample.earfcn
+                val ts = if (sample.timestamp > sessionStartedAt) sample.timestamp else sessionStartedAt
+                val (lat, lon) = CsvExportCoords.forLte(sample)
                 appendLine(
                     listOf(
-                        dateFormat.format(Date(sample.timestamp)),
+                        dateFormat.format(Date(ts)),
                         sample.technology,
                         "LTE",
                         sample.state,
@@ -45,8 +47,8 @@ class LteCsvFormatter(private val bandMapper: LteBandMapper = LteBandMapper()) {
                         sample.rsrq,
                         sample.sinr,
                         sample.operator,
-                        CsvDecimalFormatter.longitude(sample.longitude),
-                        CsvDecimalFormatter.latitude(sample.latitude),
+                        lon,
+                        lat,
                     ).joinToString(",") { CsvEscaper.escape(it) },
                 )
             }

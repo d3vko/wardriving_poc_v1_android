@@ -15,8 +15,9 @@ import kotlinx.coroutines.flow.callbackFlow
 class LocationTracker(private val fusedLocationProviderClient: FusedLocationProviderClient) {
     @SuppressLint("MissingPermission")
     fun locations(intervalMillis: Long): Flow<GeoLocation> = callbackFlow {
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMillis)
-            .setMinUpdateIntervalMillis((intervalMillis / 2).coerceAtLeast(1_000L))
+        val gpsInterval = intervalMillis.coerceAtMost(1_000L).coerceAtLeast(1_000L)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, gpsInterval)
+            .setMinUpdateIntervalMillis(gpsInterval)
             .build()
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {

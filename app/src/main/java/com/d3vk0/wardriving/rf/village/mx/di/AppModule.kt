@@ -98,8 +98,9 @@ object AppModule {
     @Provides
     @Singleton
     fun provideWifiScanner(@ApplicationContext context: Context): WifiScanner {
-        val manager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        return WifiScanner(manager)
+        val appContext = context.applicationContext
+        val manager = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        return WifiScanner(appContext, manager)
     }
 
     @Provides

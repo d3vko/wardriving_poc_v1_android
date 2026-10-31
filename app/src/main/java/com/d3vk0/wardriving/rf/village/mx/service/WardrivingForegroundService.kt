@@ -18,6 +18,7 @@ import com.d3vk0.wardriving.rf.village.mx.core.domain.SessionSettings
 import com.d3vk0.wardriving.rf.village.mx.core.duplicate.DuplicateFilter
 import com.d3vk0.wardriving.rf.village.mx.core.location.LocationTracker
 import com.d3vk0.wardriving.rf.village.mx.core.repository.WardrivingRepository
+import com.d3vk0.wardriving.rf.village.mx.core.scan.ScanCadence
 import com.d3vk0.wardriving.rf.village.mx.core.settings.AppSettingsStore
 import com.d3vk0.wardriving.rf.village.mx.core.telephony.TelephonyScanner
 import com.d3vk0.wardriving.rf.village.mx.core.wifi.WifiScanner
@@ -26,7 +27,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -76,19 +79,21 @@ class WardrivingForegroundService : Service() {
             val session = active ?: repository.startSession(settings, "android-phone")
             currentSessionId = session.id
             paused = false
-            startLocationCollection(session.id, settings)
+            startLocationCollection(session.id)
+            wifiScanner.acquire()
+            startBle(session.id, settings)
             while (collectionJob?.isActive == true) {
                 if (!paused) collectOnce(session.id, settings)
-                delay(settings.sampleIntervalMillis)
+                delay(ScanCadence.effectiveWifiPeriod(settings.sampleIntervalMillis))
             }
         }
     }
 
-    private fun startLocationCollection(sessionId: String, settings: SessionSettings) {
+    private fun startLocationCollection(sessionId: String) {
         locationJob?.cancel()
         locationJob = serviceScope.launch {
             runCatching {
-                locationTracker.locations(settings.sampleIntervalMillis).collect { location ->
+                locationTracker.locations(ScanCadence.GPS_PERIOD_MS).collect { location ->
                     latestLocation = location
                     repository.insertLocation(sessionId, location)
                 }
@@ -96,27 +101,40 @@ class WardrivingForegroundService : Service() {
         }
     }
 
+    private fun startBle(sessionId: String, settings: SessionSettings) {
+        if (!settings.bleEnabled) return
+        bleScanner.start { result ->
+            if (paused) return@start
+            val sample = bleScanner.toEntity(result, sessionId, latestLocation)
+            if (sample.mac.isBlank()) return@start
+            if (!duplicateFilter.shouldKeep("ble:${sample.mac}", sample.timestamp)) return@start
+            serviceScope.launch { repository.insertWifiBle(listOf(sample)) }
+        }
+    }
+
     private suspend fun collectOnce(sessionId: String, settings: SessionSettings) {
         val location = latestLocation
-        if (settings.wifiEnabled) {
-            val samples = wifiScanner.scan(sessionId, location)
-                .filter { duplicateFilter.shouldKeep("wifi:${it.mac}", it.timestamp) }
-            repository.insertWifiBle(samples)
-        }
-        if (settings.bleEnabled) {
-            val samples = bleScanner.scan(sessionId, location)
-                .filter { duplicateFilter.shouldKeep("ble:${it.mac}", it.timestamp) }
-            repository.insertWifiBle(samples)
-        }
-        if (settings.lteEnabled) {
-            val samples = telephonyScanner.scan(sessionId, location)
-                .filter { duplicateFilter.shouldKeep("lte:${it.mcc}:${it.mnc}:${it.lac}:${it.cellId}", it.timestamp) }
-            repository.insertLte(samples)
+        coroutineScope {
+            val wifiJob = async {
+                if (!settings.wifiEnabled) return@async
+                val samples = wifiScanner.scan(sessionId, location)
+                    .filter { duplicateFilter.shouldKeep("wifi:${it.mac}", it.timestamp) }
+                repository.insertWifiBle(samples)
+            }
+            val lteJob = async {
+                if (!settings.lteEnabled) return@async
+                val samples = telephonyScanner.scan(sessionId, location)
+                    .filter { duplicateFilter.shouldKeep("lte:${it.mcc}:${it.mnc}:${it.lac}:${it.cellId}", it.timestamp) }
+                repository.insertLte(samples)
+            }
+            wifiJob.await()
+            lteJob.await()
         }
     }
 
     private fun pauseCollection() {
         paused = true
+        bleScanner.stop()
         currentSessionId?.let { sessionId ->
             serviceScope.launch { repository.pauseSession(sessionId) }
         }
@@ -126,7 +144,11 @@ class WardrivingForegroundService : Service() {
     private fun resumeCollection() {
         paused = false
         currentSessionId?.let { sessionId ->
-            serviceScope.launch { repository.resumeSession(sessionId) }
+            serviceScope.launch {
+                val settings = settingsStore.settings.first()
+                repository.resumeSession(sessionId)
+                startBle(sessionId, settings)
+            }
         }
         startForeground(NOTIFICATION_ID, notification("Wardriving session active"))
     }
@@ -135,6 +157,7 @@ class WardrivingForegroundService : Service() {
         if (stopJob?.isActive == true) return
         val inMemorySessionId = currentSessionId
         currentSessionId = null
+        stopRadios()
         collectionJob?.cancel()
         collectionJob = null
         locationJob?.cancel()
@@ -146,7 +169,13 @@ class WardrivingForegroundService : Service() {
         }
     }
 
+    private fun stopRadios() {
+        bleScanner.stop()
+        wifiScanner.release()
+    }
+
     override fun onDestroy() {
+        stopRadios()
         collectionJob?.cancel()
         locationJob?.cancel()
         serviceScope.cancel()
