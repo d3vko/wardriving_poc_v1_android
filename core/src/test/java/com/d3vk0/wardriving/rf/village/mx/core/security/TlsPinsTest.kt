@@ -10,7 +10,7 @@ class TlsPinsTest {
     fun pinsVillageHostsAndKeepsBackupChain() {
         assertEquals(3, TlsPins.SPKI_SHA256_BASE64.size)
         assertTrue(TlsPins.isPinnedHost("wardriving-ctf.rf-village-mx.com"))
-        assertTrue(TlsPins.isPinnedHost("error-handlers.rf-village-mx.com"))
+        assertTrue(TlsPins.isPinnedHost("errors-handler.rf-village-mx.com"))
         assertFalse(TlsPins.isPinnedHost("demotiles.maplibre.org"))
     }
 }

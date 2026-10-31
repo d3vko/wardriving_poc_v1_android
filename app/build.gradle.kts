@@ -34,13 +34,13 @@ android {
             "SENTRY_DSN",
             configString(
                 "SENTRY_DSN",
-                "https://471792e4ce19406c86e1297a69e83cb7@error-handlers.rf-village-mx.com/4",
+                "https://471792e4ce19406c86e1297a69e83cb7@errors-handler.rf-village-mx.com/4",
             ),
         )
         buildConfigField("String", "MAPLIBRE_STYLE_URL", configString("MAPLIBRE_STYLE_URL", "https://demotiles.maplibre.org/style.json"))
         manifestPlaceholders["sentryDsn"] = configValue(
             "SENTRY_DSN",
-            "https://471792e4ce19406c86e1297a69e83cb7@error-handlers.rf-village-mx.com/4",
+            "https://471792e4ce19406c86e1297a69e83cb7@errors-handler.rf-village-mx.com/4",
         )
     }
 
