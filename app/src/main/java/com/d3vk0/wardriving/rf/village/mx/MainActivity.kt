@@ -306,11 +306,11 @@ private fun SessionsScreen(
     val emptyMessage = when (selectedFilter) {
         SessionFilter.UNPROCESSED -> "No hay sesiones solo locales."
         SessionFilter.PROCESSED -> "No hay sesiones en plataforma."
-        SessionFilter.ALL -> "No saved sessions yet."
+        SessionFilter.ALL -> "Aún no hay sesiones guardadas."
     }
     val canUploadAll = sessions.any { !it.uploaded && it.status == "STOPPED" }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Sessions", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item { Text("Sesiones", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item {
             Button(
                 onClick = onUploadAll,
@@ -375,20 +375,20 @@ private fun RegisterScreen(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Register", style = MaterialTheme.typography.headlineMedium)
-        OutlinedTextField(username, { username = it }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth())
+        Text("Registro", style = MaterialTheme.typography.headlineMedium)
+        OutlinedTextField(username, { username = it }, label = { Text("Usuario") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(email, { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(
             password,
             { password = it },
-            label = { Text("Password") },
+            label = { Text("Contraseña") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
             passwordConfirm,
             { passwordConfirm = it },
-            label = { Text("Confirm password") },
+            label = { Text("Confirmar contraseña") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -396,9 +396,9 @@ private fun RegisterScreen(
             Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = ::submit) { Text("Register") }
-            OutlinedButton(onClick = onLogin) { Text("Login") }
-            TextButton(onClick = onRecovery) { Text("Recover") }
+            Button(onClick = ::submit) { Text("Registrar") }
+            OutlinedButton(onClick = onLogin) { Text("Entrar") }
+            TextButton(onClick = onRecovery) { Text("Recuperar") }
         }
         TextButton(onClick = onSkip) { Text("Continuar sin cuenta") }
     }
@@ -414,23 +414,23 @@ private fun LoginScreen(
     var identifier by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Login", style = MaterialTheme.typography.headlineMedium)
+        Text("Entrar", style = MaterialTheme.typography.headlineMedium)
         Text(
             "Opcional: puedes escanear sin cuenta. El JWT sirve para subir a la pecera.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        OutlinedTextField(identifier, { identifier = it }, label = { Text("Username or email") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(identifier, { identifier = it }, label = { Text("Usuario o email") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(
             password,
             { password = it },
-            label = { Text("Password") },
+            label = { Text("Contraseña") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { onSubmit(identifier, password) }) { Text("Login") }
-            OutlinedButton(onClick = onRegister) { Text("Register") }
-            TextButton(onClick = onRecovery) { Text("Recover") }
+            Button(onClick = { onSubmit(identifier, password) }) { Text("Entrar") }
+            OutlinedButton(onClick = onRegister) { Text("Registro") }
+            TextButton(onClick = onRecovery) { Text("Recuperar") }
         }
         TextButton(onClick = onSkip) { Text("Continuar sin cuenta") }
     }
@@ -440,9 +440,9 @@ private fun LoginScreen(
 private fun RecoveryScreen(onRecover: (String) -> Unit, onSkip: () -> Unit) {
     var identifier by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Password recovery", style = MaterialTheme.typography.headlineMedium)
-        OutlinedTextField(identifier, { identifier = it }, label = { Text("Username or email") }, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { onRecover(identifier) }) { Text("Send recovery request") }
+        Text("Recuperar contraseña", style = MaterialTheme.typography.headlineMedium)
+        OutlinedTextField(identifier, { identifier = it }, label = { Text("Usuario o email") }, modifier = Modifier.fillMaxWidth())
+        Button(onClick = { onRecover(identifier) }) { Text("Enviar solicitud") }
         TextButton(onClick = onSkip) { Text("Continuar sin cuenta") }
     }
 }
@@ -453,7 +453,7 @@ private fun DashboardScreen(
     onAdvanced: () -> Unit,
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Field dashboard", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item { Text("Panel de campo", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item {
             StatusChipRow(uiState)
         }
@@ -462,13 +462,13 @@ private fun DashboardScreen(
         }
         item {
             MapPanel(
-                title = "Quick map preview",
+                title = "Vista rápida del mapa",
                 pins = uiState.liveMapPins,
                 gpsStatus = uiState.counters.gpsStatus,
                 modifier = Modifier.fillMaxWidth().aspectRatio(1.55f),
             )
         }
-        item { OutlinedButton(onClick = onAdvanced) { Text("Advanced LTE/AT") } }
+        item { OutlinedButton(onClick = onAdvanced) { Text("LTE/AT avanzado") } }
     }
 }
 
@@ -567,12 +567,12 @@ private fun ExportUploadScreen(uiState: MainUiState, viewModel: MainViewModel, o
         item {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { selectedSessionId?.let(viewModel::exportZip) }, enabled = selectedSessionId != null) { Text("ZIP") }
-            OutlinedButton(onClick = viewModel::shareLastExport, enabled = uiState.lastExportPath != null) { Text("Share exported files") }
-            OutlinedButton(onClick = onSaveAs, enabled = uiState.lastExportPath != null) { Text("Save As") }
+            OutlinedButton(onClick = viewModel::shareLastExport, enabled = uiState.lastExportPath != null) { Text("Compartir export") }
+            OutlinedButton(onClick = onSaveAs, enabled = uiState.lastExportPath != null) { Text("Guardar como") }
         }
         }
-        item { Text("Save As uses Android Storage Access Framework so the file can be written to Downloads or any selected document provider.") }
-        item { Text("Last export: ${uiState.lastExportPath ?: "None"}") }
+        item { Text("Guardar como usa el Selector de documentos de Android (Downloads u otro proveedor).") }
+        item { Text("Último export: ${uiState.lastExportPath ?: "Ninguno"}") }
     }
 }
 
@@ -586,29 +586,29 @@ private fun SessionDetailScreen(
     onUpload: (String) -> Unit,
 ) {
     if (session == null) {
-        Text("No session selected")
+        Text("Ninguna sesión seleccionada")
         return
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onBack) { Text("Volver a Sessions") }
-                Text("Session detail", style = MaterialTheme.typography.headlineSmall)
+                OutlinedButton(onClick = onBack) { Text("Volver a Sesiones") }
+                Text("Detalle de sesión", style = MaterialTheme.typography.headlineSmall)
             }
         }
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("ID: ${session.id}", fontWeight = FontWeight.Bold)
-                    Text("Status: ${session.status}")
-                    Text("Started: ${formatDate(session.startedAt)}")
-                    Text("Ended: ${session.endedAt?.let(::formatDate) ?: "Active"}")
-                    Text("Device source: ${session.deviceSource}")
+                    Text("Estado: ${session.status}")
+                    Text("Inicio: ${formatDate(session.startedAt)}")
+                    Text("Fin: ${session.endedAt?.let(::formatDate) ?: "Activa"}")
+                    Text("Origen: ${session.deviceSource}")
                     Text("Wi-Fi: ${session.wifiEnabled} | BLE: ${session.bleEnabled} | LTE: ${session.lteEnabled}")
                     Text("Upload: ${uploadState.label}")
                     Text("Wi-Fi/BLE: ${uploadState.wifiBleLabel}")
                     Text("LTE: ${uploadState.lteLabel}")
-                    Text("Local export path: ${session.localExportPath ?: "None"}")
+                    Text("Export local: ${session.localExportPath ?: "Ninguno"}")
                     Button(
                         onClick = { onUpload(session.id) },
                         enabled = uploadState.canUpload && !uploadInProgress && session.status == "STOPPED",
@@ -626,9 +626,9 @@ private fun SessionDetailScreen(
         }
         item {
             MapPanel(
-                title = "Session map",
+                title = "Mapa de sesión",
                 pins = pins,
-                gpsStatus = if (pins.isEmpty()) "No GPS-backed samples" else "${pins.size} mapped samples",
+                gpsStatus = if (pins.isEmpty()) "Sin muestras con GPS" else "${pins.size} muestras en mapa",
                 modifier = Modifier.fillMaxWidth().aspectRatio(1.25f),
             )
         }
@@ -646,7 +646,7 @@ private fun SettingsScreen(
     val settings = uiState.settings
     var jwt by remember { mutableStateOf("") }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Text("Settings", style = MaterialTheme.typography.headlineSmall) }
+        item { Text("Ajustes", style = MaterialTheme.typography.headlineSmall) }
         item {
             Text(
                 if (!uiState.username.isNullOrBlank()) "Bienvenido, ${uiState.username}" else "Sin cuenta: el escaneo local sigue activo.",
@@ -657,20 +657,20 @@ private fun SettingsScreen(
             item {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Permissions required", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("Location, wireless scanning, phone state, and notification permissions are needed before field scanning can start.")
+                        Text("Permisos necesarios", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Ubicación, escaneo inalámbrico, estado del teléfono y notificaciones hacen falta antes de iniciar el escaneo de campo.")
                         Button(onClick = onGrantPermissions) {
-                            Text("Grant permissions")
+                            Text("Conceder permisos")
                         }
                     }
                 }
             }
         }
-        item { ToggleRow("Enable Wi-Fi scanning", settings.wifiEnabled) { viewModel.updateSettings { s -> s.copy(wifiEnabled = it) } } }
-        item { ToggleRow("Enable BLE scanning", settings.bleEnabled) { viewModel.updateSettings { s -> s.copy(bleEnabled = it) } } }
-        item { ToggleRow("Enable LTE scanning", settings.lteEnabled) { viewModel.updateSettings { s -> s.copy(lteEnabled = it) } } }
-        item { ToggleRow("Enable local CSV export", settings.localCsvExport) { viewModel.updateSettings { s -> s.copy(localCsvExport = it) } } }
-        item { ToggleRow("Keep screen awake", settings.keepScreenAwake) { viewModel.updateSettings { s -> s.copy(keepScreenAwake = it) } } }
+        item { ToggleRow("Escanear Wi-Fi", settings.wifiEnabled) { viewModel.updateSettings { s -> s.copy(wifiEnabled = it) } } }
+        item { ToggleRow("Escanear BLE", settings.bleEnabled) { viewModel.updateSettings { s -> s.copy(bleEnabled = it) } } }
+        item { ToggleRow("Escanear LTE", settings.lteEnabled) { viewModel.updateSettings { s -> s.copy(lteEnabled = it) } } }
+        item { ToggleRow("Exportar CSV local", settings.localCsvExport) { viewModel.updateSettings { s -> s.copy(localCsvExport = it) } } }
+        item { ToggleRow("Mantener pantalla encendida", settings.keepScreenAwake) { viewModel.updateSettings { s -> s.copy(keepScreenAwake = it) } } }
         item {
             Text("Cadencia Wi-Fi ~2 s, BLE continuo, GPS 1 s (tipo Wigle).", style = MaterialTheme.typography.bodySmall)
         }
@@ -691,7 +691,7 @@ private fun SettingsScreen(
         }
         item {
             OutlinedButton(onClick = { viewModel.updateSettings { SessionSettings() } }) {
-                Text("Reset settings")
+                Text("Restablecer ajustes")
             }
         }
         if (!uiState.authenticated) {
@@ -703,13 +703,13 @@ private fun SettingsScreen(
         } else {
             item {
                 OutlinedButton(onClick = viewModel::logout) {
-                    Text("Logout API token")
+                    Text("Cerrar sesión API")
                 }
             }
         }
         item {
             OutlinedButton(onClick = viewModel::deleteAllLocalData) {
-                Text("Delete all local data")
+                Text("Borrar datos locales")
             }
         }
     }
@@ -718,15 +718,15 @@ private fun SettingsScreen(
 @Composable
 private fun AdvancedAtModemScreen() {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Advanced LTE/AT modem settings", style = MaterialTheme.typography.headlineSmall) }
+        item { Text("Ajustes LTE/AT avanzados", style = MaterialTheme.typography.headlineSmall) }
         item {
-            Text("Internal phone LTE sampling uses public Android Telephony APIs only. Raw AT commands are not available for internal modems on stock Android.")
+            Text("El muestreo LTE interno usa solo APIs públicas de Telephony. En Android stock no hay comandos AT crudos al módem interno.")
         }
         item {
-            Text("ExternalAtModemModule is documented for optional USB OTG modems such as SIMCom SIM7600 and Quectel devices. Destructive commands and band locking must remain disabled unless the user explicitly enables advanced mode.")
+            Text("ExternalAtModemModule documenta módems USB OTG opcionales (SIMCom SIM7600, Quectel). Comandos destructivos y band locking deben quedar deshabilitados salvo modo avanzado explícito.")
         }
         item {
-            Text("Example read-only commands: ATI, AT+CGMI, AT+CGMM, AT+CGMR, AT+CSQ, AT+COPS?, AT+CEREG?, AT+CPSI?, AT+QENG=\"servingcell\", AT+QNWINFO.")
+            Text("Ejemplos solo lectura: ATI, AT+CGMI, AT+CGMM, AT+CGMR, AT+CSQ, AT+COPS?, AT+CEREG?, AT+CPSI?, AT+QENG=\"servingcell\", AT+QNWINFO.")
         }
     }
 }
@@ -740,10 +740,10 @@ private fun FieldModeControls(
     uiState: MainUiState,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = onStart, enabled = uiState.activeSessionId == null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Start") }
-        OutlinedButton(onClick = onPause, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Pause") }
-        OutlinedButton(onClick = onResume, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Resume") }
-        OutlinedButton(onClick = onStop, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text(if (uiState.isStopping) "Stopping…" else "Stop") }
+        Button(onClick = onStart, enabled = uiState.activeSessionId == null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Iniciar") }
+        OutlinedButton(onClick = onPause, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Pausa") }
+        OutlinedButton(onClick = onResume, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text("Reanudar") }
+        OutlinedButton(onClick = onStop, enabled = uiState.activeSessionId != null && !uiState.isStopping, modifier = Modifier.weight(1f).height(56.dp)) { Text(if (uiState.isStopping) "Deteniendo…" else "Detener") }
     }
 }
 
@@ -782,7 +782,7 @@ private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean
 
 @Composable
 private fun StatusLine(uiState: MainUiState) {
-    Text("Status: ${uiState.status}", style = MaterialTheme.typography.labelLarge)
+    Text("Estado: ${uiState.status}", style = MaterialTheme.typography.labelLarge)
     Spacer(Modifier.height(12.dp))
 }
 
@@ -835,14 +835,14 @@ private fun MapPanel(title: String, pins: List<MapPin>, gpsStatus: String, modif
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("${pins.size} mapped samples", style = MaterialTheme.typography.labelMedium)
+                Text("${pins.size} muestras en mapa", style = MaterialTheme.typography.labelMedium)
             }
             if (pins.isEmpty()) {
                 Box(
                     modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("No GPS-backed samples yet. $gpsStatus", modifier = Modifier.padding(16.dp))
+                    Text("Aún sin muestras con GPS. $gpsStatus", modifier = Modifier.padding(16.dp))
                 }
             } else {
                 Box {
@@ -1024,7 +1024,7 @@ private fun SessionRow(session: WardrivingSessionEntity, onOpen: (WardrivingSess
             Text(session.id, fontWeight = FontWeight.Bold)
             Text("${session.status} started ${formatDate(session.startedAt)}")
             Text("Wi-Fi ${session.wifiEnabled} | BLE ${session.bleEnabled} | LTE ${session.lteEnabled}")
-            TextButton(onClick = { onOpen(session) }) { Text("Open session detail") }
+            TextButton(onClick = { onOpen(session) }) { Text("Ver detalle") }
         }
     }
 }

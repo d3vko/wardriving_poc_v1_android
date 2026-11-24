@@ -5,8 +5,8 @@ internal const val AUTHENTICATED_START_ROUTE = FIELD_START_ROUTE
 
 internal val FIELD_NAVIGATION_ITEMS = listOf(
     "live" to "Pecera",
-    "dashboard" to "Dashboard",
-    "sessions" to "Sessions",
-    "export" to "Export",
-    "settings" to "Settings",
+    "dashboard" to "Panel",
+    "sessions" to "Sesiones",
+    "export" to "Exportar",
+    "settings" to "Ajustes",
 )

@@ -44,6 +44,22 @@ class AuthRepositoryTest {
         assertEquals("access-jwt", tokenStore.savedToken)
         assertEquals("operator", tokenStore.savedUsername)
         assertEquals(AuthRequest(username = "operator", password = "secret"), api.loginRequest)
+        assertNull(api.loginRequest?.email)
+    }
+
+    @Test
+    fun loginWithEmailUsesUsernameKeyLikeBackendContract() = runTest {
+        val api = FakeAuthApi(loginResponse = AuthResponse(refresh = "refresh-jwt", access = "access-jwt", username = "operator"))
+        val tokenStore = FakeTokenStore()
+        val repository = AuthRepository(api, config, tokenStore)
+
+        repository.login("  ops@example.com  ", "secret")
+
+        assertEquals(
+            AuthRequest(username = "ops@example.com", password = "secret"),
+            api.loginRequest,
+        )
+        assertNull(api.loginRequest?.email)
     }
 
     @Test

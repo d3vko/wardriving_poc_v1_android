@@ -13,12 +13,11 @@ Request:
 ```json
 {
   "username": "operator",
-  "email": null,
   "password": "secret"
 }
 ```
 
-If the identifier contains `@`, the app sends it as `email`; otherwise it sends it as `username`.
+El campo JSON siempre es `username` (contrato del backend / SimpleJWT). Si el usuario escribe un email, también va en `username` (p. ej. `"username": "ops@example.com"`). No se envía la clave `email` en login.
 
 Response:
 

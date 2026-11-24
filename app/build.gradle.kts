@@ -16,19 +16,19 @@ android {
         applicationId = "com.d3vk0.wardriving.rf.village.mx"
         minSdk = 26
         targetSdk = 34
-        versionCode = configInt("APP_VERSION_CODE", 1)
-        versionName = configValue("APP_VERSION_NAME", "0.0.2")
+        versionCode = configInt("APP_VERSION_CODE", 6)
+        versionName = configValue("APP_VERSION_NAME", "0.1.2")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "API_BASE_URL", configString("API_BASE_URL", "https://wardriving-ctf.rf-village-mx.com/wardriving/api/v1/"))
-        buildConfigField("String", "API_LOGIN_PATH", configString("API_LOGIN_PATH", "auth/login"))
-        buildConfigField("String", "API_REGISTER_PATH", configString("API_REGISTER_PATH", "auth/register"))
-        buildConfigField("String", "API_PASSWORD_RECOVERY_PATH", configString("API_PASSWORD_RECOVERY_PATH", "auth/password-recovery"))
+        buildConfigField("String", "API_LOGIN_PATH", configString("API_LOGIN_PATH", "auth/login/"))
+        buildConfigField("String", "API_REGISTER_PATH", configString("API_REGISTER_PATH", "auth/register/"))
+        buildConfigField("String", "API_PASSWORD_RECOVERY_PATH", configString("API_PASSWORD_RECOVERY_PATH", "auth/password/reset/"))
         buildConfigField("String", "API_UPLOAD_PATH", configString("API_UPLOAD_PATH", "files-uploaded/"))
-        buildConfigField("String", "API_UPLOAD_TYPE_WIFI_BLE", configString("API_UPLOAD_TYPE_WIFI_BLE", "wifi_ble"))
-        buildConfigField("String", "API_UPLOAD_TYPE_LTE", configString("API_UPLOAD_TYPE_LTE", "lte"))
-        buildConfigField("String", "APP_ACCENT_COLOR", configString("APP_ACCENT_COLOR", "#4EE08A"))
+        buildConfigField("String", "API_UPLOAD_TYPE_WIFI_BLE", configString("API_UPLOAD_TYPE_WIFI_BLE", "wifi_ble_android"))
+        buildConfigField("String", "API_UPLOAD_TYPE_LTE", configString("API_UPLOAD_TYPE_LTE", "lte_android"))
+        buildConfigField("String", "APP_ACCENT_COLOR", configString("APP_ACCENT_COLOR", "#00A676"))
         buildConfigField(
             "String",
             "SENTRY_DSN",
@@ -46,6 +46,8 @@ android {
 
     buildTypes {
         release {
+            // Side-load / campo: firmar con debug hasta tener keystore de release.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

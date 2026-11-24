@@ -62,10 +62,13 @@ class AuthRepository(
         tokenStore.saveUsername(JwtClaims.username(token) ?: fallbackUsername?.takeIf { it.isNotBlank() })
     }
 
+    /**
+     * El backend (CustomTokenObtainPairSerializer) exige siempre la clave JSON
+     * `username`; acepta ahí username o email. No enviar `email` en login.
+     */
     private fun authRequest(identifier: String, password: String): AuthRequest {
         return AuthRequest(
-            username = identifier.takeUnless { it.contains("@") },
-            email = identifier.takeIf { it.contains("@") },
+            username = identifier.trim(),
             password = password,
         )
     }
